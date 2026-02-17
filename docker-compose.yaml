@@ -10,6 +10,10 @@ services:
       - ./config/upf-iptables.sh:/free5gc/upf-iptables.sh
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    privileged: true
     networks:
       privnet:
         aliases:
