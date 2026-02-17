@@ -1,0 +1,62 @@
+2026-01-09T12:47:51.413139363Z[36m [INFO][UDM][Main] [0mUDM version:  
+	free5GC version: v4.1.0
+	build time:      2025-09-10T16:29:53Z
+	commit hash:     e776c421
+	commit time:     2025-08-22T06:11:18Z
+	go version:      go1.24.5 linux/amd64
+2026-01-09T12:47:51.413840813Z[36m [INFO][UDM][CFG] [0mRead config from [./config/udmcfg.yaml]
+2026-01-09T12:47:51.416411643Z[36m [INFO][UDM][Main] [0mLog enable is set to [true]
+2026-01-09T12:47:51.416444497Z[36m [INFO][UDM][Main] [0mLog level is set to [info]
+2026-01-09T12:47:51.416456131Z[36m [INFO][UDM][Main] [0mReport Caller is set to [false]
+2026-01-09T12:47:51.416482906Z[36m [INFO][UDM][Util] [0mudmconfig Info: Version[1.0.3] Description[UDM initial local configuration]
+2026-01-09T12:47:51.416978520Z[36m [INFO][UDM][SBI] [0mBinding addr: [udm.free5gc.org:8000]
+2026-01-09T12:47:51.417025073Z[36m [INFO][UDM][Init] [0mServer started
+2026-01-09T12:47:51.417037598Z[36m [INFO][UDM][SBI] [0mStarting server...
+2026-01-09T12:47:51.436805632Z[36m [INFO][UDM][Main] [0mOAuth2 setting receive from NRF: true
+2026-01-09T12:47:51.437007685Z[36m [INFO][UDM][SBI] [0mStart SBI server (listen on udm.free5gc.org:8000)
+2026-01-09T12:48:11.270353593Z[36m [INFO][UDM][UEAU] [0mHandle GenerateAuthDataRequest
+2026-01-09T12:48:11.279153567Z[36m [INFO][UDM][Suci] [0mscheme 0
+2026-01-09T12:48:11.279192257Z[36m [INFO][UDM][Suci] [0mSUPI type is IMSI
+2026-01-09T12:48:11.298527522Z[36m [INFO][UDM][Proc] [0mModifyAuthenticationSubscriptionRequest:  [{replace /sequenceNumber  { 00000000003e map[] 0 }}]
+2026-01-09T12:48:11.302855339Z[36m [INFO][UDM][GIN] [0m| 200 |   10.100.200.12 | POST    | /nudm-ueau/v1/suci-0-208-93-0000-0-0-0000000001/security-information/generate-auth-data |  |
+2026-01-09T12:48:11.333197602Z[36m [INFO][UDM][UEAU] [0mHandle ConfirmAuthDataRequest
+2026-01-09T12:48:11.346288312Z[36m [INFO][UDM][GIN] [0m| 201 |   10.100.200.12 | POST    | /nudm-ueau/v1/imsi-208930000000001/auth-events |  |
+2026-01-09T12:48:11.372936001Z[36m [INFO][UDM][Consumer] [0mTwoLayerPathHandlerFunc,  imsi-208930000000001 nssai
+2026-01-09T12:48:11.372998409Z[36m [INFO][UDM][SDM] [0mHandle GetNssai
+2026-01-09T12:48:11.389373907Z[36m [INFO][UDM][GIN] [0m| 200 |   10.100.200.16 | GET     | /nudm-sdm/v2/imsi-208930000000001/nssai?plmn-id=%7B%22mcc%22%3A%22208%22%2C%22mnc%22%3A%2293%22%7D |  |
+2026-01-09T12:48:11.418119935Z[36m [INFO][UDM][UECM] [0mHandle RegistrationAmf3gppAccess
+2026-01-09T12:48:11.418147664Z[36m [INFO][UDM][UECM] [0mUEID: imsi-208930000000001
+2026-01-09T12:48:11.429743354Z[36m [INFO][UDM][GIN] [0m| 201 |   10.100.200.16 | PUT     | /nudm-uecm/v1/imsi-208930000000001/registrations/amf-3gpp-access |  |
+2026-01-09T12:48:11.444554912Z[36m [INFO][UDM][Consumer] [0mTwoLayerPathHandlerFunc,  imsi-208930000000001 am-data
+2026-01-09T12:48:11.444587809Z[36m [INFO][UDM][SDM] [0mHandle GetAmData
+2026-01-09T12:48:11.455988456Z[36m [INFO][UDM][GIN] [0m| 200 |   10.100.200.16 | GET     | /nudm-sdm/v2/imsi-208930000000001/am-data?plmn-id=%7B%22mcc%22%3A%22208%22%2C%22mnc%22%3A%2293%22%7D |  |
+2026-01-09T12:48:11.475776168Z[36m [INFO][UDM][Consumer] [0mTwoLayerPathHandlerFunc,  imsi-208930000000001 smf-select-data
+2026-01-09T12:48:11.475850917Z[36m [INFO][UDM][SDM] [0mHandle GetSmfSelectData
+2026-01-09T12:48:11.544345433Z[36m [INFO][UDM][GIN] [0m| 200 |   10.100.200.16 | GET     | /nudm-sdm/v2/imsi-208930000000001/smf-select-data?plmn-id=%7B%22mcc%22%3A%22208%22%2C%22mnc%22%3A%2293%22%7D |  |
+2026-01-09T12:48:11.554890552Z[36m [INFO][UDM][Consumer] [0mTwoLayerPathHandlerFunc,  imsi-208930000000001 ue-context-in-smf-data
+2026-01-09T12:48:11.554920843Z[36m [INFO][UDM][SDM] [0mHandle GetUeContextInSmfData
+2026-01-09T12:48:11.566342878Z[36m [INFO][UDM][GIN] [0m| 200 |   10.100.200.16 | GET     | /nudm-sdm/v2/imsi-208930000000001/ue-context-in-smf-data |  |
+2026-01-09T12:48:11.577038480Z[36m [INFO][UDM][Consumer] [0mTwoLayerPathHandlerFunc,  imsi-208930000000001 sdm-subscriptions
+2026-01-09T12:48:11.578646523Z[36m [INFO][UDM][SDM] [0mHandle Subscribe
+2026-01-09T12:48:11.590521752Z[36m [INFO][UDM][GIN] [0m| 201 |   10.100.200.16 | POST    | /nudm-sdm/v2/imsi-208930000000001/sdm-subscriptions |  |
+2026-01-09T12:48:11.956706202Z[36m [INFO][UDM][Consumer] [0mTwoLayerPathHandlerFunc,  imsi-208930000000001 sm-data
+2026-01-09T12:48:11.956810925Z[36m [INFO][UDM][SDM] [0mHandle GetSmData
+2026-01-09T12:48:11.964603755Z[36m [INFO][UDM][SDM] [0mgetSmDataProcedure: SUPI[imsi-208930000000001] PLMNID[20893] DNN[internet] SNssai[{"sst":1,"sd":"010203"}]
+2026-01-09T12:48:11.973953292Z[36m [INFO][UDM][GIN] [0m| 200 |    10.100.200.5 | GET     | /nudm-sdm/v2/imsi-208930000000001/sm-data?dnn=internet&plmn-id=%7B%22mcc%22%3A%22208%22%2C%22mnc%22%3A%2293%22%7D&single-nssai=%7B%22sst%22%3A1%2C%22sd%22%3A%22010203%22%7D |  |
+2026-01-09T12:48:12.139513437Z[36m [INFO][UDM][Consumer] [0mTwoLayerPathHandlerFunc,  imsi-208930000000001 sdm-subscriptions
+2026-01-09T12:48:12.139665213Z[36m [INFO][UDM][SDM] [0mHandle Subscribe
+2026-01-09T12:48:12.155377812Z[36m [INFO][UDM][GIN] [0m| 201 |    10.100.200.5 | POST    | /nudm-sdm/v2/imsi-208930000000001/sdm-subscriptions |  |
+2026-01-09T12:48:12.221479836Z[36m [INFO][UDM][Consumer] [0mTwoLayerPathHandlerFunc,  imsi-208930000000001 sm-data
+2026-01-09T12:48:12.221549555Z[36m [INFO][UDM][SDM] [0mHandle GetSmData
+2026-01-09T12:48:12.231437606Z[36m [INFO][UDM][SDM] [0mgetSmDataProcedure: SUPI[imsi-208930000000001] PLMNID[20893] DNN[internet] SNssai[{"sst":1,"sd":"112233"}]
+2026-01-09T12:48:12.236680078Z[36m [INFO][UDM][GIN] [0m| 200 |    10.100.200.5 | GET     | /nudm-sdm/v2/imsi-208930000000001/sm-data?dnn=internet&plmn-id=%7B%22mcc%22%3A%22208%22%2C%22mnc%22%3A%2293%22%7D&single-nssai=%7B%22sst%22%3A1%2C%22sd%22%3A%22112233%22%7D |  |
+2026-01-09T12:49:12.734301234Z[36m [INFO][UDM][UEAU] [0mHandle GenerateAuthDataRequest
+2026-01-09T12:49:12.743026378Z[36m [INFO][UDM][Suci] [0mscheme 1
+2026-01-09T12:49:12.743073847Z[36m [INFO][UDM][Suci] [0mSUPI type is IMSI
+2026-01-09T12:49:12.743089786Z[31m [ERRO][UDM][UEAU] [0msuciToSupi error:  keyIndex (0) out of range (2)
+2026-01-09T12:49:12.743444909Z[36m [INFO][UDM][GIN] [0m| 403 |   10.100.200.12 | POST    | /nudm-ueau/v1/suci-0-208-93-0000-1-0-1abad1c69619bed469513901b6f672d3dc842453b4a3aea2e13187f0773bc848e8b60fc0a2fa51b3d2b49d86ee/security-information/generate-auth-data |  |
+2026-01-09T12:49:23.720365106Z[36m [INFO][UDM][UEAU] [0mHandle GenerateAuthDataRequest
+2026-01-09T12:49:23.728788162Z[36m [INFO][UDM][Suci] [0mscheme 1
+2026-01-09T12:49:23.728829044Z[36m [INFO][UDM][Suci] [0mSUPI type is IMSI
+2026-01-09T12:49:23.728840946Z[31m [ERRO][UDM][UEAU] [0msuciToSupi error:  keyIndex (0) out of range (2)
+2026-01-09T12:49:23.728902149Z[36m [INFO][UDM][GIN] [0m| 403 |   10.100.200.12 | POST    | /nudm-ueau/v1/suci-0-208-93-0000-1-0-1abad1c69619bed469513901b6f672d3dc842453b4a3aea2e13187f0773bc848e8b60fc0a2fa51b3d2b49d86ee/security-information/generate-auth-data |  |

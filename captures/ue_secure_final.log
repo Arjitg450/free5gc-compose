@@ -1,0 +1,54 @@
+UERANSIM v3.2.7
+[2026-01-09 12:47:55.575] [sctp] [info] Trying to establish SCTP connection... (10.100.200.16:38412)
+[2026-01-09 12:47:55.579] [sctp] [info] SCTP connection established (10.100.200.16:38412)
+[2026-01-09 12:47:55.579] [sctp] [debug] SCTP association setup ascId[250054]
+[2026-01-09 12:47:55.579] [ngap] [debug] Sending NG Setup Request
+[2026-01-09 12:47:55.581] [ngap] [debug] NG Setup Response received
+[2026-01-09 12:47:55.581] [ngap] [info] NG Setup procedure is successful
+[2026-01-09 12:48:11.217] [rrc] [debug] UE[1] new signal detected
+[2026-01-09 12:48:11.218] [rrc] [info] RRC Setup for UE[1]
+[2026-01-09 12:48:11.219] [ngap] [debug] Initial NAS message received from UE[1]
+[2026-01-09 12:48:11.657] [ngap] [debug] Initial Context Setup Request received
+[2026-01-09 12:48:12.170] [ngap] [info] PDU session resource(s) setup for UE[1] count[1]
+[2026-01-09 12:48:13.522] [ngap] [info] PDU session resource(s) setup for UE[1] count[1]
+[2026-01-09 12:48:53.618] [ngap] [error] Unhandled NGAP initiating-message received (31)
+[2026-01-09 12:48:53.725] [sctp] [debug] SCTP association shutdown (clientId: 2)
+[2026-01-09 12:48:53.725] [ngap] [error] Association terminated for AMF[2]
+[2026-01-09 12:48:53.725] [ngap] [debug] Removing AMF context[2]
+[2026-01-09 12:48:53.726] [sctp] [warning] Unhandled SCTP notification received
+UERANSIM v3.2.7
+[2026-01-09 12:48:56.498] [sctp] [info] Trying to establish SCTP connection... (10.100.200.16:38412)
+[2026-01-09 12:48:56.504] [sctp] [info] SCTP connection established (10.100.200.16:38412)
+[2026-01-09 12:48:56.504] [sctp] [debug] SCTP association setup ascId[250065]
+[2026-01-09 12:48:56.505] [ngap] [debug] Sending NG Setup Request
+[2026-01-09 12:48:56.506] [ngap] [debug] NG Setup Response received
+[2026-01-09 12:48:56.507] [ngap] [info] NG Setup procedure is successful
+[2026-01-09 12:49:12.667] [rrc] [debug] UE[1] new signal detected
+[2026-01-09 12:49:12.688] [rrc] [info] RRC Setup for UE[1]
+[2026-01-09 12:49:12.688] [ngap] [debug] Initial NAS message received from UE[1]
+[2026-01-09 12:50:24.726] [rrc] [debug] UE[2] new signal detected
+[2026-01-09 12:50:24.747] [rrc] [info] RRC Setup for UE[2]
+[2026-01-09 12:50:24.748] [ngap] [debug] Initial NAS message received from UE[2]
+[2026-01-09 12:50:46.807] [rrc] [debug] UE[3] new signal detected
+[2026-01-09 12:50:46.818] [rrc] [info] RRC Setup for UE[3]
+[2026-01-09 12:50:46.819] [ngap] [debug] Initial NAS message received from UE[3]
+[2026-01-09 12:50:47.163] [ngap] [debug] Initial Context Setup Request received
+[2026-01-09 12:50:47.687] [ngap] [info] PDU session resource(s) setup for UE[3] count[1]
+[2026-01-09 12:51:04.030] [ngap] [info] PDU session resource(s) setup for UE[3] count[1]
+[2026-01-09 12:51:05.479] [ngap] [error] Unhandled NGAP initiating-message received (31)
+[2026-01-09 12:51:05.581] [sctp] [debug] SCTP association shutdown (clientId: 2)
+[2026-01-09 12:51:05.581] [sctp] [warning] Unhandled SCTP notification received
+[2026-01-09 12:51:05.581] [ngap] [error] Association terminated for AMF[2]
+[2026-01-09 12:51:05.581] [ngap] [debug] Removing AMF context[2]
+UERANSIM v3.2.7
+[2026-01-09 12:51:08.207] [sctp] [info] Trying to establish SCTP connection... (10.100.200.16:38412)
+[2026-01-09 12:51:08.213] [sctp] [info] SCTP connection established (10.100.200.16:38412)
+[2026-01-09 12:51:08.213] [sctp] [debug] SCTP association setup ascId[250075]
+[2026-01-09 12:51:08.214] [ngap] [debug] Sending NG Setup Request
+[2026-01-09 12:51:08.215] [ngap] [debug] NG Setup Response received
+[2026-01-09 12:51:08.215] [ngap] [info] NG Setup procedure is successful
+[2026-01-09 12:51:14.680] [rrc] [debug] UE[1] new signal detected
+[2026-01-09 12:51:14.701] [rrc] [info] RRC Setup for UE[1]
+[2026-01-09 12:51:14.702] [ngap] [debug] Initial NAS message received from UE[1]
+[2026-01-09 12:51:15.036] [ngap] [debug] Initial Context Setup Request received
+[2026-01-09 12:51:15.426] [ngap] [info] PDU session resource(s) setup for UE[1] count[1]
