@@ -62,6 +62,7 @@ def main() -> int:
     run_id = latest_run_id(runs_root, scenario_id, args.repetition)
     run_dir = runs_root / run_id
 
+    run([sys.executable, "experiments/normalize_pcap.py", "--run-dir", str(run_dir)], cwd=root)
     run([sys.executable, "experiments/normalize_events.py", "--run-dir", str(run_dir)], cwd=root)
     run([sys.executable, "experiments/baselines.py", "--run-dir", str(run_dir)], cwd=root)
 

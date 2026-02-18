@@ -11,7 +11,9 @@
   "capture": {
     "containers_for_logs": ["amf", "smf", "ueransim"],
     "pcap_targets": [
-      { "container": "upf", "interface": "eth0", "filter": "sctp or udp port 2152 or tcp port 8000" }
+      { "container": "amf",  "interface": "eth0", "filter": "sctp port 38412 or tcp port 8000", "role": "n2_sbi" },
+      { "container": "smf",  "interface": "eth0", "filter": "udp port 8805 or tcp port 8000",  "role": "n4_sbi" },
+      { "container": "upf",  "interface": "eth0", "filter": "udp port 2152 or udp port 8805",  "role": "n3_n4" }
     ],
     "normalization_drop_fields": ["supi", "amf_ue_ngap_id"]
   },

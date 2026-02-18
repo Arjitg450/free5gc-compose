@@ -6,6 +6,11 @@ Supports three parser paths:
   1. free5GC v4.x NF logs (AMF, SMF, AUSF, UDM, UDR, NRF, etc.)
   2. free5GC v3.2 legacy NF logs
   3. UERANSIM nr-ue / nr-gnb logs
+
+Event types, procedure_hint and interface_hint align with 3GPP 5GS:
+  TS 23.501/23.502 (architecture, procedures), TS 24.501 (5GMM/NAS),
+  TS 29.244 (PFCP), TS 29.5xx (SBI: Nudm, Nausf, Nnrf, Namf, Nsmf, Nudr_DR),
+  TS 38.413 (NGAP). See docs/3GPP_ALIGNMENT.md for verification.
 """
 
 from __future__ import annotations
@@ -642,6 +647,22 @@ def main() -> int:
             f"effective={coverage['effective_match_rate']:.1%}]"
         )
 
+    pcap_events_path = out_dir / "events_pcap.jsonl"
+    pcap_event_count = 0
+    if pcap_events_path.exists():
+        pcap_events: List[Dict] = []
+        with pcap_events_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    ev = json.loads(line)
+                    ev["event_id"] = next_event_id
+                    next_event_id += 1
+                    pcap_events.append(ev)
+        all_events.extend(pcap_events)
+        pcap_event_count = len(pcap_events)
+        print(f"  [pcap] Merged {pcap_event_count} pcap events from {pcap_events_path.name}")
+
     all_events.sort(key=lambda x: x["timestamp"])
 
     drop_fields = load_drop_fields(run_dir)
@@ -655,6 +676,8 @@ def main() -> int:
     total_lines = sum(c["total_lines"] for c in all_coverage)
     aggregate_coverage = {
         "event_count": len(all_events),
+        "log_events": len(all_events) - pcap_event_count,
+        "pcap_events": pcap_event_count,
         "total_lines_all_logs": total_lines,
         "total_matched_lines": total_matched,
         "aggregate_match_rate": round(total_matched / total_lines, 4) if total_lines > 0 else 0.0,
@@ -670,6 +693,8 @@ def main() -> int:
         json.dump(
             {
                 "event_count": len(all_events),
+                "log_events": len(all_events) - pcap_event_count,
+                "pcap_events": pcap_event_count,
                 "drop_fields_applied": drop_fields,
                 "sources": sorted({e["source"] for e in all_events}),
                 "aggregate_match_rate": aggregate_coverage["aggregate_match_rate"],
@@ -679,6 +704,7 @@ def main() -> int:
         )
 
     print(f"Wrote {len(all_events)} events to {out_dir / 'events.jsonl'}")
+    print(f"  (log={len(all_events) - pcap_event_count}, pcap={pcap_event_count})")
     print(f"Parser coverage report: {out_dir / 'parser_coverage.json'}")
     print(f"Aggregate match rate: {aggregate_coverage['aggregate_match_rate']:.1%}")
     return 0

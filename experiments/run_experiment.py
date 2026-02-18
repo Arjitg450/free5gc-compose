@@ -143,6 +143,17 @@ def preflight(project_root: pathlib.Path, dry_run: bool) -> Dict[str, str]:
 # Pre-capture health check: verify tcpdump is available (Gap 3)
 # ---------------------------------------------------------------------------
 
+def detect_container_os(container: str, project_root: pathlib.Path) -> str:
+    """Detect Alpine vs Debian/Ubuntu in a container."""
+    cp = run_cmd(
+        f"docker exec {shlex.quote(container)} cat /etc/os-release",
+        cwd=project_root, check=False, dry_run=False,
+    )
+    if "alpine" in cp.stdout.lower():
+        return "alpine"
+    return "debian"
+
+
 def check_tcpdump_available(pcap_targets: List[Dict], project_root: pathlib.Path, dry_run: bool) -> Dict:
     """Verify tcpdump is installed in containers that need pcap capture."""
     result = {"checked": [], "all_ok": True}
@@ -155,20 +166,31 @@ def check_tcpdump_available(pcap_targets: List[Dict], project_root: pathlib.Path
             continue
         seen.add(container)
         cp = run_cmd(
-            f"docker exec {shlex.quote(container)} which tcpdump",
+            f"docker exec {shlex.quote(container)} tcpdump --version",
             cwd=project_root, check=False, dry_run=False,
         )
         if cp.returncode != 0:
-            print(f"[warn] tcpdump not found in {container}, attempting install...")
-            run_cmd(
-                f"docker exec {shlex.quote(container)} bash -c 'apt-get update -qq && apt-get install -y -qq tcpdump' 2>/dev/null || true",
-                cwd=project_root, check=False, dry_run=False,
-            )
+            os_type = detect_container_os(container, project_root)
+            print(f"[warn] tcpdump not found in {container} ({os_type}), attempting install...")
+            if os_type == "alpine":
+                run_cmd(
+                    f"docker exec {shlex.quote(container)} sh -c "
+                    f"'apk add --no-cache tcpdump 2>/dev/null || true'",
+                    cwd=project_root, check=False, dry_run=False,
+                )
+            else:
+                run_cmd(
+                    f"docker exec {shlex.quote(container)} sh -c "
+                    f"'apt-get update -qq && apt-get install -y -qq tcpdump 2>/dev/null || true'",
+                    cwd=project_root, check=False, dry_run=False,
+                )
             cp2 = run_cmd(
                 f"docker exec {shlex.quote(container)} which tcpdump",
                 cwd=project_root, check=False, dry_run=False,
             )
             ok = cp2.returncode == 0
+            if not ok:
+                print(f"[warn] tcpdump unavailable in {container}; will use host bridge capture")
             result["checked"].append({"container": container, "status": "installed" if ok else "missing"})
             if not ok:
                 result["all_ok"] = False
@@ -217,23 +239,89 @@ def stop_log_captures(captures: List[RunningCapture], dry_run: bool) -> None:
             pass
 
 
+def resolve_container_ip(container: str, project_root: pathlib.Path) -> Optional[str]:
+    """Get the container's IP on the docker bridge network."""
+    cp = run_cmd(
+        f"docker inspect {shlex.quote(container)} "
+        f"--format '{{{{range .NetworkSettings.Networks}}}}{{{{.IPAddress}}}}{{{{end}}}}'",
+        cwd=project_root, check=False, dry_run=False,
+    )
+    ip = cp.stdout.strip().strip("'")
+    return ip if ip else None
+
+
+def find_docker_bridge(project_root: pathlib.Path) -> Optional[str]:
+    """Find the br-* bridge interface used by the free5gc compose network."""
+    cp = run_cmd(
+        "ip -o addr show | grep '10.100.200' | awk '{print $2}'",
+        cwd=project_root, check=False, dry_run=False,
+    )
+    iface = cp.stdout.strip()
+    return iface if iface else None
+
+
 def start_pcap_captures(
     pcap_targets: List[Dict],
+    pcaps_dir: pathlib.Path,
     project_root: pathlib.Path,
     dry_run: bool,
 ) -> List[Dict]:
     started: List[Dict] = []
+    bridge_iface: Optional[str] = None
+    pcaps_mount = str(pcaps_dir.resolve())
+
     for idx, target in enumerate(pcap_targets):
         container = target["container"]
         iface = target["interface"]
         pkt_filter = target.get("filter", "")
         remote = f"/tmp/netsam_run_{idx}.pcap"
-        command = (
-            f"docker exec {shlex.quote(container)} bash -lc "
-            f"\"tcpdump -i {shlex.quote(iface)} -w {remote} {pkt_filter} -Z root >/tmp/tcpdump_run.log 2>&1 &\""
-        )
-        run_cmd(command, cwd=project_root, check=False, dry_run=dry_run)
-        started.append({"container": container, "remote_path": remote, "target_index": idx})
+
+        has_tcpdump = run_cmd(
+            f"docker exec {shlex.quote(container)} tcpdump --version",
+            cwd=project_root, check=False, dry_run=dry_run,
+        ).returncode == 0 if not dry_run else True
+
+        if has_tcpdump:
+            command = (
+                f"docker exec {shlex.quote(container)} sh -c "
+                f"\"tcpdump -i {shlex.quote(iface)} -w {remote} {pkt_filter} -Z root >/tmp/tcpdump_run.log 2>&1 &\""
+            )
+            run_cmd(command, cwd=project_root, check=False, dry_run=dry_run)
+            started.append({
+                "container": container, "remote_path": remote,
+                "target_index": idx, "mode": "container",
+            })
+        else:
+            if bridge_iface is None:
+                bridge_iface = find_docker_bridge(project_root)
+            container_ip = resolve_container_ip(container, project_root)
+            if bridge_iface and container_ip:
+                sidecar_name = f"netsam_pcap_{container}_{idx}"
+                remote_pcap = f"/capture/{container}_{idx}.pcap"
+                bpf = f"host {container_ip}"
+                if pkt_filter:
+                    bpf += f" and ( {pkt_filter} )"
+                sidecar_cmd = [
+                    "docker", "run", "--rm", "-d",
+                    "--name", sidecar_name,
+                    "--net=host", "--privileged",
+                    "-v", f"{pcaps_mount}:/capture",
+                    "netsam/tcpdump:latest",
+                    "-i", bridge_iface, "-w", remote_pcap,
+                    "-Z", "root",
+                ] + bpf.split()
+                print(f"[capture][pcap][sidecar] {sidecar_name}: {bpf}")
+                if not dry_run:
+                    subprocess.run(sidecar_cmd, cwd=str(project_root),
+                                   capture_output=True, timeout=30)
+                started.append({
+                    "container": container,
+                    "remote_path": remote_pcap,
+                    "target_index": idx, "mode": "sidecar",
+                    "sidecar_name": sidecar_name,
+                })
+            else:
+                print(f"[warn] Cannot capture for {container}: no tcpdump, no bridge")
     return started
 
 
@@ -246,9 +334,20 @@ def stop_and_collect_pcaps(
     local_paths: List[str] = []
     for target in started_pcaps:
         container = target["container"]
-        remote = target["remote_path"]
         idx = target["target_index"]
         local = pcaps_dir / f"{container}_{idx}.pcap"
+        mode = target.get("mode", "container")
+
+        if mode == "sidecar":
+            sidecar = target.get("sidecar_name", "")
+            if sidecar and not dry_run:
+                run_cmd(f"docker stop {shlex.quote(sidecar)}", cwd=project_root,
+                        check=False, dry_run=False)
+                time.sleep(1)
+            local_paths.append(str(local))
+            continue
+
+        remote = target["remote_path"]
         run_cmd(
             f"docker exec {shlex.quote(container)} killall tcpdump || true",
             cwd=project_root, check=False, dry_run=dry_run,
@@ -403,6 +502,7 @@ def main() -> int:
     )
     pcap_captures = start_pcap_captures(
         pcap_targets=pcap_targets,
+        pcaps_dir=dirs["pcaps"],
         project_root=project_root,
         dry_run=args.dry_run,
     )
