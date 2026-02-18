@@ -34,9 +34,11 @@ DEFAULT_NF_PORT_MAP = {
     2152: "gtp-u",
 }
 
-# 3GPP NGAP procedure codes → human-readable names (TS 38.413 Table 9.1.3)
+# 3GPP NGAP procedure codes → (event_suffix, procedure_hint). TS 38.413 Table 9.1.3.
+# Non-UE-associated: 0 = NG Setup, 1 = AMF Configuration Update; UE-associated: 14–47 etc.
 NGAP_PROCEDURE_NAMES: Dict[int, Tuple[str, str]] = {
-    0: ("amf_config_update", "nf_management"),
+    0: ("ng_setup", "gnb_setup"),
+    1: ("amf_config_update", "nf_management"),
     10: ("handover_cancel", "handover"),
     11: ("handover_required", "handover"),
     12: ("handover_request", "handover"),
@@ -54,7 +56,6 @@ NGAP_PROCEDURE_NAMES: Dict[int, Tuple[str, str]] = {
     41: ("ue_context_release_request", "deregistration"),
     46: ("dl_nas_transport", "nas_transport"),
     47: ("ul_nas_transport", "nas_transport"),
-    21: ("ng_setup", "gnb_setup"),
 }
 
 # 3GPP PFCP message types (TS 29.244 Table 7.2.1-1)
