@@ -1,0 +1,31 @@
+{
+  "scenario_id": "S4_retry_heavy",
+  "description": "30 UEs with induced transient failures causing retries and error flows.",
+  "duration_seconds": 900,
+  "observability_mode": "full",
+  "concurrency_target": 30,
+  "retry_profile": {
+    "enabled": true,
+    "max_retries_per_flow": 3
+  },
+  "capture": {
+    "containers_for_logs": ["amf", "smf", "upf", "ausf", "udm", "udr", "nrf", "ueransim"],
+    "pcap_targets": [
+      { "container": "upf", "interface": "eth0", "filter": "sctp or udp port 2152 or tcp port 8000" }
+    ]
+  },
+  "provision": {
+    "subscriber_count": 30,
+    "base_imsi": 208930000000001
+  },
+  "actions": [
+    { "at_second": 30,  "command": "docker exec -d ueransim ./nr-ue -c ./config/uecfg.yaml -n 10" },
+    { "at_second": 60,  "command": "docker exec -d ueransim ./nr-ue -c /ueransim/config/ue-group-2.yaml -n 10" },
+    { "at_second": 150, "command": "docker pause smf || true" },
+    { "at_second": 170, "command": "docker unpause smf || true" },
+    { "at_second": 200, "command": "docker exec -d ueransim ./nr-ue -c /ueransim/config/ue-group-3.yaml -n 10" },
+    { "at_second": 400, "command": "docker pause ausf || true" },
+    { "at_second": 415, "command": "docker unpause ausf || true" },
+    { "at_second": 450, "command": "docker exec -d ueransim ./nr-ue -c /ueransim/config/ue-group-2.yaml -n 5" }
+  ]
+}

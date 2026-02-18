@@ -6,3 +6,17 @@ base/free5gc
 
 # cert
 cert/*_*.pem
+
+# experiments
+experiments/runs/
+experiments/ue_configs/
+experiments/ue_configs_*/
+experiments/subscribers.json
+experiments/subscribers_*.json
+
+# Python
+__pycache__/
+*.pyc
+
+# analysis outputs
+analysis/reports/

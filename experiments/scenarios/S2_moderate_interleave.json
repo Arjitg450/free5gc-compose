@@ -1,0 +1,26 @@
+{
+  "scenario_id": "S2_moderate_interleave",
+  "description": "10 concurrent UEs with moderate overlap of registration and PDU session flows.",
+  "duration_seconds": 600,
+  "observability_mode": "full",
+  "concurrency_target": 10,
+  "retry_profile": {
+    "enabled": false,
+    "max_retries_per_flow": 0
+  },
+  "capture": {
+    "containers_for_logs": ["amf", "smf", "upf", "ausf", "udm", "udr", "nrf", "ueransim"],
+    "pcap_targets": [
+      { "container": "upf", "interface": "eth0", "filter": "sctp or udp port 2152 or tcp port 8000" }
+    ]
+  },
+  "provision": {
+    "subscriber_count": 10,
+    "base_imsi": 208930000000001
+  },
+  "actions": [
+    { "at_second": 20, "command": "docker exec -d ueransim ./nr-ue -c ./config/uecfg.yaml -n 10" },
+    { "at_second": 180, "command": "docker exec ueransim ping -c 3 -W 2 -I uesimtun0 8.8.8.8 || true" },
+    { "at_second": 300, "command": "docker exec ueransim ping -c 3 -W 2 -I uesimtun1 8.8.8.8 || true" }
+  ]
+}

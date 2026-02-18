@@ -1,0 +1,28 @@
+{
+  "scenario_id": "S5_partial_observability",
+  "description": "30 UEs with intentionally reduced observability: only AMF/SMF/UERANSIM logs, SUPI and AMF_UE_NGAP_ID dropped.",
+  "duration_seconds": 900,
+  "observability_mode": "pcap_partial_logs",
+  "concurrency_target": 30,
+  "retry_profile": {
+    "enabled": false,
+    "max_retries_per_flow": 0
+  },
+  "capture": {
+    "containers_for_logs": ["amf", "smf", "ueransim"],
+    "pcap_targets": [
+      { "container": "upf", "interface": "eth0", "filter": "sctp or udp port 2152 or tcp port 8000" }
+    ],
+    "normalization_drop_fields": ["supi", "amf_ue_ngap_id"]
+  },
+  "provision": {
+    "subscriber_count": 30,
+    "base_imsi": 208930000000001
+  },
+  "actions": [
+    { "at_second": 30,  "command": "docker exec -d ueransim ./nr-ue -c ./config/uecfg.yaml -n 10" },
+    { "at_second": 60,  "command": "docker exec -d ueransim ./nr-ue -c /ueransim/config/ue-group-2.yaml -n 10" },
+    { "at_second": 90,  "command": "docker exec -d ueransim ./nr-ue -c /ueransim/config/ue-group-3.yaml -n 10" },
+    { "at_second": 300, "command": "docker exec ueransim ping -c 3 -W 2 -I uesimtun0 8.8.8.8 || true" }
+  ]
+}

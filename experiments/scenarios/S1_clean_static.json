@@ -1,0 +1,26 @@
+{
+  "scenario_id": "S1_clean_static",
+  "description": "Single active UE, no forced failures, full observability. Deterministic gold labels possible.",
+  "duration_seconds": 300,
+  "observability_mode": "full",
+  "concurrency_target": 1,
+  "retry_profile": {
+    "enabled": false,
+    "max_retries_per_flow": 0
+  },
+  "capture": {
+    "containers_for_logs": ["amf", "smf", "upf", "ausf", "udm", "udr", "nrf", "ueransim"],
+    "pcap_targets": [
+      { "container": "upf", "interface": "eth0", "filter": "sctp or udp port 2152 or tcp port 8000" }
+    ]
+  },
+  "provision": {
+    "subscriber_count": 1,
+    "base_imsi": 208930000000001
+  },
+  "actions": [
+    { "at_second": 10, "command": "docker exec -d ueransim ./nr-ue -c ./config/uecfg.yaml -n 1" },
+    { "at_second": 90, "command": "docker exec ueransim ping -c 5 -I uesimtun0 8.8.8.8 || true" },
+    { "at_second": 200, "command": "docker exec ueransim ./nr-cli imsi-208930000000001 --exec 'deregister normal' || true" }
+  ]
+}
