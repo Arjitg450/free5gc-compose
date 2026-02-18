@@ -17,6 +17,13 @@ import pathlib
 import re
 from typing import Dict, Iterable, List, Optional, Tuple
 
+# Strip ANSI color/format codes from free5GC log lines (e.g. [36m [0m)
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(line: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", line)
+
 # ---------------------------------------------------------------------------
 # Timestamp regexes
 # ---------------------------------------------------------------------------
@@ -67,6 +74,24 @@ PDU_SESSION_KV_RE = re.compile(r"pdu_session_id[:=]\s*(\d+)", re.IGNORECASE)
 # Fallback loose SUPI
 SUPI_LOOSE_RE = re.compile(r"(imsi-\d{10,15})")
 
+# UERANSIM UE index: UE[1], UE[2], ... in gNB / UE logs
+UERANSIM_UE_IDX_RE = re.compile(r"UE\[(\d+)\]")
+
+# High-frequency noise: data-plane telemetry (UPF periodic usage reports) and
+# charging heartbeats (SMF) account for 95%+ of raw log lines but carry zero
+# control-plane procedure information.  Filtering them early avoids ~170k
+# unnecessary regex checks per S2 run.
+NOISE_RE = re.compile(
+    r"build MultiUnitUsageFromUsageReport"
+    r"|No report need to be charged"
+    r"|serveUSAReport"
+    r"|handleSessionReportResponse"
+    r"|recv event\[TYPE_PERIO_"
+    r"|new ticker"
+    r"|Certificate verify: x509:"
+    r"|XresStar ="
+)
+
 # ---------------------------------------------------------------------------
 # UERANSIM log line parser
 # ---------------------------------------------------------------------------
@@ -84,83 +109,226 @@ UERANSIM_LINE_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 EVENT_PATTERNS: List[Tuple[re.Pattern, str, str]] = [
-    # --- AMF NGAP ---
+    # ===================================================================
+    # AMF NGAP  (case-insensitive variants for v4.x log text)
+    # ===================================================================
     (re.compile(r"Handle InitialUEMessage"), "initial_ue_message", "registration"),
     (re.compile(r"Send Initial Context Setup Request"), "initial_context_setup", "registration"),
-    (re.compile(r"Send PDUSessionResourceSetupRequest"), "pdu_resource_setup", "pdu_session"),
+    (re.compile(r"Send PDU\s*Session\s*Resource\s*Setup\s*Request"), "pdu_resource_setup", "pdu_session"),
     (re.compile(r"Handle PDUSessionResourceSetupResponse"), "pdu_resource_setup_resp", "pdu_session"),
     (re.compile(r"Send UE Context Release Command"), "ue_context_release_cmd", "deregistration"),
     (re.compile(r"Handle UE Context Release Complete"), "ue_context_release_complete", "deregistration"),
-    (re.compile(r"Send Downlink NAS Transport"), "dl_nas_transport", "nas_transport"),
+    (re.compile(r"Send Downlink (?:NAS|Nas) Transport"), "dl_nas_transport", "nas_transport"),
+    (re.compile(r"Handle Uplink(?:NAS|Nas)Transport"), "ul_nas_transport_ngap", "nas_transport"),
+    (re.compile(r"Handle N1N2 Message Transfer Request"), "n1n2_transfer", "pdu_session"),
+    (re.compile(r"Not comprehended IE"), "ngap_ie_warning", "registration"),
 
-    # --- AMF GMM: Registration ---
+    # ===================================================================
+    # AMF GMM — Registration
+    # ===================================================================
     (re.compile(r"Handle Registration Request"), "registration_request", "registration"),
     (re.compile(r"Handle InitialRegistration"), "initial_registration", "registration"),
     (re.compile(r"Send Registration Accept|RegistrationAccept sent"), "registration_accept", "registration"),
     (re.compile(r"Handle Registration Complete"), "registration_complete", "registration"),
+    (re.compile(r"Send Registration Reject"), "registration_reject", "registration"),
+    (re.compile(r"RegistrationType:\s*Initial Registration"), "registration_type_initial", "registration"),
+    (re.compile(r"Send Configuration Update Command"), "config_update_cmd", "registration"),
+    (re.compile(r"MobileIdentity5GS:\s*SUCI"), "suci_identity", "registration"),
+    (re.compile(r"nsiInformation is still nil"), "nsi_fallback_nrf", "registration"),
+    (re.compile(r"RequestedNssai.*ServingSnssai"), "nssai_selection", "registration"),
 
-    # --- AMF GMM: Identity ---
+    # ===================================================================
+    # AMF GMM — Identity
+    # ===================================================================
     (re.compile(r"Send Identity Request"), "identity_request", "registration"),
     (re.compile(r"Handle Identity Response"), "identity_response", "registration"),
 
-    # --- AMF GMM: Authentication ---
+    # ===================================================================
+    # AMF GMM — Authentication  (specific-first ordering)
+    # ===================================================================
+    (re.compile(r"Authentication procedure failed"), "auth_procedure_failed", "registration"),
     (re.compile(r"Authentication procedure"), "auth_procedure_start", "registration"),
     (re.compile(r"Send Authentication Request"), "auth_request", "registration"),
     (re.compile(r"Handle Authentication Response"), "auth_response", "registration"),
     (re.compile(r"Handle Authentication Failure"), "auth_failure", "registration"),
+    (re.compile(r"Handle Authentication Error"), "auth_error", "registration"),
     (re.compile(r"Send Authentication Reject"), "auth_reject", "registration"),
-    (re.compile(r"Nausf_UEAU Authenticate Request Failed"), "auth_sbi_failure", "registration"),
+    (re.compile(r"Nausf_UEAU Authenticate Request (?:Failed|Error)"), "auth_sbi_failure", "registration"),
+    (re.compile(r"UE Security Context is not Available"), "ue_security_ctx_missing", "registration"),
 
-    # --- AMF GMM: Security ---
+    # ===================================================================
+    # AMF GMM — Security
+    # ===================================================================
     (re.compile(r"Send Security Mode Command"), "security_mode_command", "registration"),
     (re.compile(r"Handle Security Mode Complete"), "security_mode_complete", "registration"),
 
-    # --- AMF GMM: PDU Session ---
+    # ===================================================================
+    # AMF GMM — Timers
+    # ===================================================================
+    (re.compile(r"Start T\d+ timer"), "timer_start", "registration"),
+    (re.compile(r"Stop T\d+ timer"), "timer_stop", "registration"),
+
+    # ===================================================================
+    # AMF GMM — PDU Session
+    # ===================================================================
     (re.compile(r"Handle UL NAS Transport"), "ul_nas_transport", "pdu_session"),
     (re.compile(r"Transport 5GSM Message to SMF"), "transport_5gsm", "pdu_session"),
     (re.compile(r"create smContext\[pduSessionID:\s*\d+\]\s*Success"), "sm_context_create_success", "pdu_session"),
     (re.compile(r"CreateSmContextRequest Error"), "sm_context_create_error", "pdu_session"),
     (re.compile(r"Select SMF"), "select_smf", "pdu_session"),
 
-    # --- AMF GMM: Deregistration ---
+    # ===================================================================
+    # AMF GMM — Deregistration
+    # ===================================================================
     (re.compile(r"Handle Deregistration Request"), "deregistration_request", "deregistration"),
     (re.compile(r"Send Deregistration Accept"), "deregistration_accept", "deregistration"),
 
-    # --- LIB FSM state transitions ---
+    # ===================================================================
+    # AMF GIN — SBI HTTP access
+    # ===================================================================
+    (re.compile(r"\|\s*(?:POST|PUT)\s*\|.*/namf-comm/"), "amf_sbi_comm", "pdu_session"),
+
+    # ===================================================================
+    # LIB FSM state transitions
+    # ===================================================================
     (re.compile(r"Handle event\[(.+?)\], transition from \[(\w+)\] to \[(\w+)\]"), "fsm_transition", "fsm"),
 
-    # --- AUSF ---
+    # ===================================================================
+    # AUSF
+    # ===================================================================
     (re.compile(r"HandleUeAuthPostRequest"), "ausf_auth_post", "authentication_sub"),
-    (re.compile(r"HandleAuth5gAkaComfirmRequest"), "ausf_aka_confirm", "authentication_sub"),
+    (re.compile(r"HandleAuth5gAka(?:Comfirm|Confirm)Request|Auth5gAkaComfirmRequest"), "ausf_aka_confirm", "authentication_sub"),
+    (re.compile(r"5G AKA confirmation succeeded"), "ausf_aka_confirm_ok", "authentication_sub"),
     (re.compile(r"Serving network authorized"), "ausf_net_authorized", "authentication_sub"),
+    (re.compile(r"Use 5G AKA auth method"), "ausf_5g_aka_selected", "authentication_sub"),
+    (re.compile(r"GenerateAuthDataApi error"), "ausf_generate_auth_error", "authentication_sub"),
 
-    # --- UDM ---
+    # ===================================================================
+    # AUSF GIN — SBI HTTP access
+    # ===================================================================
+    (re.compile(r"\|\s*(?:POST|PUT)\s*\|.*/nausf-auth/"), "ausf_sbi_auth", "authentication_sub"),
+
+    # ===================================================================
+    # UDM
+    # ===================================================================
     (re.compile(r"HandleGenerateAuthDataRequest|Handle GenerateAuthDataRequest"), "udm_generate_auth", "authentication_sub"),
     (re.compile(r"HandleConfirmAuthDataRequest|Handle ConfirmAuthDataRequest"), "udm_confirm_auth", "authentication_sub"),
     (re.compile(r"Handle CreateAMFContext"), "udm_create_amf_ctx", "registration"),
     (re.compile(r"HandleGetAmData|Handle GetAmData"), "udm_get_am_data", "registration"),
     (re.compile(r"HandleGetSmfSelectData|Handle GetSmfSelectData"), "udm_get_smf_select", "registration"),
-    (re.compile(r"suciPart:"), "udm_suci_deconcealment", "authentication_sub"),
+    (re.compile(r"HandleGetSmData|Handle GetSmData"), "udm_get_sm_data", "pdu_session"),
+    (re.compile(r"Handle RegistrationAmf3gppAccess"), "udm_reg_amf_ctx", "registration"),
+    (re.compile(r"Handle GetNssai"), "udm_get_nssai", "registration"),
+    (re.compile(r"Handle GetUeContextInSmfData"), "udm_get_ue_ctx_smf", "pdu_session"),
+    (re.compile(r"suciPart:|SuciToSupi"), "udm_suci_deconcealment", "authentication_sub"),
+    (re.compile(r"SUPI type is IMSI"), "udm_supi_type_imsi", "authentication_sub"),
+    (re.compile(r"decryption MAC match"), "udm_decryption_ok", "authentication_sub"),
+    (re.compile(r"HandleSubscribe|Handle Subscribe"), "udm_subscribe", "registration"),
+    (re.compile(r"HandleUnsubscribe|Handle Unsubscribe"), "udm_unsubscribe", "deregistration"),
+    (re.compile(r"Error on QueryAuthSubsData|Return from UDR QueryAuthSubsData error"), "udm_auth_query_error", "authentication_sub"),
 
-    # --- UDR ---
+    # ===================================================================
+    # UDM GIN — SBI HTTP access
+    # ===================================================================
+    (re.compile(r"\|\s*(?:POST|PUT)\s*\|.*/nudm-ueau/"), "udm_sbi_auth", "authentication_sub"),
+    (re.compile(r"\|\s*(?:GET|PUT)\s*\|.*/nudm-sdm/"), "udm_sbi_sdm", "registration"),
+    (re.compile(r"\|\s*(?:GET|PUT)\s*\|.*/nudm-uecm/"), "udm_sbi_uecm", "registration"),
+
+    # ===================================================================
+    # UDR  (v3.x Handle… + v4.x DataRepo/GIN)
+    # ===================================================================
     (re.compile(r"HandleQueryAuthSubsData|Handle QueryAuthSubsData"), "udr_query_auth", "authentication_sub"),
     (re.compile(r"HandleCreateAmfContext|Handle CreateAmfContext"), "udr_create_amf_ctx", "registration"),
+    (re.compile(r"QueryAmDataProcedure"), "udr_query_am_data", "registration"),
 
-    # --- SMF ---
+    # ===================================================================
+    # UDR GIN — SBI HTTP access  (URL-path scoped to /nudr-dr/)
+    # ===================================================================
+    (re.compile(r"\|\s*(?:GET|POST|PUT|PATCH)\s*\|.*/nudr-dr/.*authentication-data"), "udr_sbi_auth_data", "authentication_sub"),
+    (re.compile(r"\|\s*(?:GET|POST|PUT|PATCH)\s*\|.*/nudr-dr/.*provisioned-data/am-data"), "udr_sbi_am_data", "registration"),
+    (re.compile(r"\|\s*(?:GET|POST|PUT|PATCH)\s*\|.*/nudr-dr/.*provisioned-data/sm"), "udr_sbi_sm_data", "pdu_session"),
+    (re.compile(r"\|\s*(?:GET|POST|PUT|PATCH)\s*\|.*/nudr-dr/.*context-data"), "udr_sbi_context", "registration"),
+    (re.compile(r"\|\s*(?:GET|POST|PUT|PATCH)\s*\|.*/nudr-dr/.*policy-data"), "udr_sbi_policy", "pdu_session"),
+    (re.compile(r"\|\s*(?:GET|POST|PUT|PATCH)\s*\|.*/nudr-dr/.*sdm-subscriptions"), "udr_sbi_sdm_sub", "registration"),
+    (re.compile(r"\|\s*(?:GET|POST|PUT|PATCH)\s*\|.*/nudr-dr/.*(?:influenceData|application-data)"), "udr_sbi_influence", "pdu_session"),
+
+    # ===================================================================
+    # SMF  (specific-first for overlapping "Send Charging …" variants)
+    # ===================================================================
     (re.compile(r"Receive Create SM Context Request"), "smf_receive_create", "pdu_session"),
+    (re.compile(r"Receive Update SM Context Request"), "smf_receive_update", "pdu_session"),
+    (re.compile(r"Receive Release SM Context Request"), "smf_receive_release", "deregistration"),
     (re.compile(r"HandlePDUSessionSMContextCreate|In HandlePDUSessionSMContextCreate"), "sm_context_create", "pdu_session"),
     (re.compile(r"HandlePDUSessionEstablishmentRequest|In HandlePDUSessionEstablishmentRequest"), "pdu_session_est_req", "pdu_session"),
     (re.compile(r"HandlePDUSessionSMContextUpdate"), "sm_context_update", "pdu_session"),
-    (re.compile(r"HandlePDUSessionSMContextRelease"), "sm_context_release", "deregistration"),
+    (re.compile(r"HandlePDUSessionSMContextRelease|In HandlePDUSessionSMContextRelease"), "sm_context_release", "deregistration"),
     (re.compile(r"Selected UPF"), "smf_selected_upf", "pdu_session"),
-    (re.compile(r"Send PFCP Session Establishment Request"), "pfcp_session_est_req", "pdu_session"),
-    (re.compile(r"Send PFCP Session Modification Request"), "pfcp_session_mod_req", "pdu_session"),
-    (re.compile(r"Send PFCP Session Deletion"), "pfcp_session_del_req", "deregistration"),
+    (re.compile(r"Allocated (?:UE IP address|PDUAdress)"), "smf_ip_allocated", "pdu_session"),
+    (re.compile(r"Send(?:ing)? PFCP Session Establishment Request"), "pfcp_session_est_req", "pdu_session"),
+    (re.compile(r"Received PFCP Session Establishment Accepted Response"), "pfcp_session_est_resp", "pdu_session"),
+    (re.compile(r"Send(?:ing)? PFCP Session Modification Request"), "pfcp_session_mod_req", "pdu_session"),
+    (re.compile(r"Received PFCP Session Modification Accepted Response"), "pfcp_session_mod_resp", "pdu_session"),
+    (re.compile(r"Send(?:ing)? PFCP Session Deletion Request"), "pfcp_session_del_req", "deregistration"),
+    (re.compile(r"Received PFCP Session Deletion Accepted Response"), "pfcp_session_del_resp", "deregistration"),
+    (re.compile(r"SDM Subscription Successful"), "smf_sdm_subscription", "pdu_session"),
+    (re.compile(r"CHF Selection for SMContext"), "smf_chf_selection", "pdu_session"),
+    (re.compile(r"Send Charging Data Request\[Termination\]"), "smf_charging_terminate", "deregistration"),
+    (re.compile(r"Send Charging Data Request"), "smf_charging_req", "pdu_session"),
+    (re.compile(r"Install PCCRule"), "smf_pcc_rule_install", "pdu_session"),
+    (re.compile(r"Send NF Discovery Serving UDM"), "smf_nf_disc_udm", "pdu_session"),
+    (re.compile(r"SendNFDiscoveryServingAMF"), "smf_nf_disc_amf", "pdu_session"),
+    (re.compile(r"Release IP"), "smf_ip_released", "deregistration"),
+    (re.compile(r"No Default Data Path"), "smf_no_default_path", "pdu_session"),
+    (re.compile(r"Has default path"), "smf_has_default_path", "pdu_session"),
+    (re.compile(r"N1N2MessageTransfer.*failed"), "smf_n1n2_transfer_fail", "pdu_session"),
+    (re.compile(r"Unexpected state"), "smf_unexpected_state", "pdu_session"),
 
-    # --- NRF ---
+    # ===================================================================
+    # SMF GIN — SBI HTTP access
+    # ===================================================================
+    (re.compile(r"\|\s*(?:POST|PUT)\s*\|.*/nsmf-pdusession/"), "smf_sbi_pdu_session", "pdu_session"),
+
+    # ===================================================================
+    # NRF
+    # ===================================================================
     (re.compile(r"Handle NFDiscoveryRequest"), "nrf_discovery", "sbi_discovery"),
+    (re.compile(r"Handle NFRegisterRequest"), "nrf_register", "nf_management"),
+    (re.compile(r"In HTTPAccessTokenRequest"), "nrf_access_token_req", "sbi_auth"),
 
-    # --- UERANSIM: Registration ---
+    # ===================================================================
+    # NRF GIN — SBI HTTP access
+    # ===================================================================
+    (re.compile(r"\|\s*PUT\s*\|.*/nnrf-nfm/v1/nf-instances"), "nrf_sbi_nf_register", "nf_management"),
+    (re.compile(r"\|\s*GET\s*\|.*/nnrf-disc/v1/nf-instances"), "nrf_sbi_nf_discovery", "sbi_discovery"),
+    (re.compile(r"\|\s*POST\s*\|.*/oauth2/token"), "nrf_sbi_oauth_token", "sbi_auth"),
+
+    # ===================================================================
+    # UPF PFCP
+    # ===================================================================
+    (re.compile(r"handleAssociationSetupRequest"), "upf_assoc_setup", "pfcp_association"),
+    (re.compile(r"New node"), "upf_new_node", "pfcp_association"),
+    (re.compile(r"handleSessionEstablishmentRequest"), "upf_session_est_req", "pdu_session"),
+    (re.compile(r"New session"), "upf_session_created", "pdu_session"),
+    (re.compile(r"handleSessionModificationRequest"), "upf_session_mod_req", "pdu_session"),
+    (re.compile(r"handleSessionDeletionRequest"), "upf_session_del_req", "deregistration"),
+    (re.compile(r"sess deleted"), "upf_session_deleted", "deregistration"),
+
+    # ===================================================================
+    # UERANSIM gNB — NGAP / RRC / SCTP
+    # ===================================================================
+    (re.compile(r"NG Setup procedure is successful"), "gnb_ng_setup", "gnb_setup"),
+    (re.compile(r"SCTP connection established"), "gnb_sctp_connected", "gnb_setup"),
+    (re.compile(r"RRC Setup for UE"), "gnb_rrc_setup", "registration"),
+    (re.compile(r"Initial NAS message received from UE"), "gnb_initial_nas", "registration"),
+    (re.compile(r"Initial Context Setup Request received"), "gnb_initial_ctx_setup", "registration"),
+    (re.compile(r"PDU session resource\(s\) setup for UE"), "gnb_pdu_session_setup", "pdu_session"),
+    (re.compile(r"UE Context Release Command received"), "gnb_ue_release_cmd", "deregistration"),
+    (re.compile(r"Releasing RRC connection for UE"), "gnb_rrc_release", "deregistration"),
+    (re.compile(r"UE\[\d+\] new signal detected"), "gnb_ue_detected", "registration"),
+
+    # ===================================================================
+    # UERANSIM UE — Registration
+    # ===================================================================
     (re.compile(r"Sending Initial Registration"), "ue_sending_reg", "registration"),
     (re.compile(r"UE switches to state \[MM-REGISTER-INITIATED\]"), "ue_reg_initiated", "registration"),
     (re.compile(r"Authentication Request received"), "ue_auth_request", "registration"),
@@ -170,20 +338,28 @@ EVENT_PATTERNS: List[Tuple[re.Pattern, str, str]] = [
     (re.compile(r"Initial Registration is successful"), "ue_reg_success", "registration"),
     (re.compile(r"Initial Registration failed"), "ue_reg_failed", "registration"),
 
-    # --- UERANSIM: PDU Session ---
+    # ===================================================================
+    # UERANSIM UE — PDU Session
+    # ===================================================================
     (re.compile(r"Sending PDU Session Establishment Request"), "ue_pdu_send", "pdu_session"),
     (re.compile(r"PDU Session establishment is successful PSI\[(\d+)\]"), "ue_pdu_success", "pdu_session"),
     (re.compile(r"PDU Session Establishment Reject"), "ue_pdu_reject", "pdu_session"),
 
-    # --- UERANSIM: State changes ---
+    # ===================================================================
+    # UERANSIM UE — State changes
+    # ===================================================================
     (re.compile(r"UE switches to state \[([A-Z\-/]+)\]"), "ue_state_change", "ue_state"),
     (re.compile(r"RRC connection established"), "ue_rrc_connected", "registration"),
     (re.compile(r"Selected cell plmn"), "ue_cell_selected", "registration"),
 
-    # --- UERANSIM: Deregistration ---
+    # ===================================================================
+    # UERANSIM UE — Deregistration
+    # ===================================================================
     (re.compile(r"UE switches to state \[MM-DEREGISTERED/NA\]"), "ue_deregistered", "deregistration"),
 
-    # --- Generic fallbacks (checked last) ---
+    # ===================================================================
+    # Generic fallbacks (checked last)
+    # ===================================================================
     (re.compile(r"timeout|retransmit", re.IGNORECASE), "retry_or_timeout", "retry_flow"),
     (re.compile(r"handover", re.IGNORECASE), "handover_event", "handover"),
 ]
@@ -270,6 +446,11 @@ def extract_ids(line: str, tags: str) -> Dict[str, Optional[str]]:
         if m:
             ran_ue = m.group(1)
 
+    if not ran_ue:
+        m = UERANSIM_UE_IDX_RE.search(line)
+        if m:
+            ran_ue = m.group(1)
+
     m = PDU_SESSION_INLINE_RE.search(line)
     if m:
         pdu_session = m.group(1)
@@ -307,25 +488,27 @@ def strongest_ue_key(ids: Dict[str, Optional[str]]) -> str:
 def read_lines(path: pathlib.Path) -> Iterable[str]:
     with path.open("r", encoding="utf-8", errors="ignore") as f:
         for line in f:
-            line = line.strip()
+            line = strip_ansi(line.strip())
             if line:
                 yield line
 
 
 def detect_interface_hint(parsed: Dict, message: str) -> str:
-    """Infer the interface from NF and category."""
-    nf = parsed.get("nf", "")
-    cat = parsed.get("category", "")
-    if cat.lower() in ("ngap", "n2"):
+    """Infer the 3GPP interface from NF name and log category."""
+    cat_lower = parsed.get("category", "").lower()
+    if cat_lower in ("ngap", "n2", "sctp"):
         return "n2"
-    if cat.lower() in ("pfcp", "n4"):
+    if cat_lower in ("pfcp", "n4", "perio"):
         return "n4"
-    if cat.lower() in ("gin", "sbi", "http"):
+    if cat_lower in ("gin", "sbi", "http", "consumer", "datarepo",
+                      "ueau", "ueauth", "charging", "disc"):
         return "sbi"
-    if cat.lower() in ("nas", "gmm", "gsm"):
+    if cat_lower in ("nas", "gmm", "gsm", "pdusess", "ctx"):
         return "nas"
-    if cat.lower() in ("rrc",):
+    if cat_lower in ("rrc",):
         return "rrc"
+    if cat_lower in ("gtp5g", "buff"):
+        return "n3"
     if "http" in message.lower() or "/n" in message.lower():
         return "sbi"
     return "unknown"
@@ -341,6 +524,8 @@ def normalize_log_file(
     events: List[Dict] = []
     event_id = start_event_id
     total_lines = 0
+    parsed_lines = 0
+    noise_filtered = 0
     matched_lines = 0
 
     for line in read_lines(path):
@@ -348,10 +533,14 @@ def normalize_log_file(
         parsed = parse_line(line)
         if not parsed:
             continue
+        parsed_lines += 1
+
+        if NOISE_RE.search(parsed["message"]):
+            noise_filtered += 1
+            continue
 
         classification = classify_event(parsed["message"])
         if not classification:
-            # Line was parseable as a log entry but didn't match any known event
             continue
 
         matched_lines += 1
@@ -373,12 +562,19 @@ def normalize_log_file(
         events.append(event)
         event_id += 1
 
+    useful_lines = parsed_lines - noise_filtered
     coverage = {
         "source": source_container,
         "total_lines": total_lines,
+        "parsed_lines": parsed_lines,
+        "noise_filtered": noise_filtered,
         "matched_lines": matched_lines,
-        "unmatched_lines": total_lines - matched_lines,
+        "unmatched_lines": useful_lines - matched_lines,
+        "unparseable_lines": total_lines - parsed_lines,
         "match_rate": round(matched_lines / total_lines, 4) if total_lines > 0 else 0.0,
+        "effective_match_rate": round(
+            matched_lines / max(1, useful_lines), 4
+        ),
     }
     return events, coverage
 
@@ -442,6 +638,8 @@ def main() -> int:
         print(
             f"  {container}: {coverage['matched_lines']}/{coverage['total_lines']} "
             f"lines matched ({coverage['match_rate']:.1%})"
+            f"  [noise={coverage['noise_filtered']}, "
+            f"effective={coverage['effective_match_rate']:.1%}]"
         )
 
     all_events.sort(key=lambda x: x["timestamp"])
