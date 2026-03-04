@@ -6,3 +6,11 @@ base/free5gc
 
 # cert
 cert/*_*.pem
+
+# not part of this branch
+experiments/
+attack_poc/smf-build/smf
+
+# large capture files (over GitHub limit)
+dos_attack_capture.pcap
+dos_mitigated_capture.pcap

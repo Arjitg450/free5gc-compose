@@ -1,0 +1,29 @@
+# Stage 1: Build the compromised SMF binary (free5gc requires Go 1.25+)
+FROM golang:1.25-bookworm AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get -y install gcc cmake autoconf libtool pkg-config libmnl-dev libyaml-dev && \
+    apt-get clean
+
+WORKDIR /go/src/smf
+COPY smf/ .
+
+RUN go mod download && \
+    CGO_ENABLED=0 go build -o /go/bin/smf ./cmd
+
+# Stage 2: Minimal runtime image (certs provided by volume in compose)
+FROM alpine:3.19
+
+LABEL description="Free5GC SMF - Compromised (Tunnel Swap Attack PoC)"
+
+RUN apk add --no-cache bash curl tcpdump
+
+WORKDIR /free5gc
+RUN mkdir -p config/ log/ cert/
+
+COPY --from=builder /go/bin/smf ./smf
+
+VOLUME [ "/free5gc/config", "/free5gc/cert" ]
+EXPOSE 8000

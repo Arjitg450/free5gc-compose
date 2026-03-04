@@ -1,0 +1,18 @@
+==============================================
+ ATTACK PROOF REPORT — 20260304_125722
+==============================================
+
+--- SMF [ATTACK] log lines ---
+(none)
+
+--- PFCP associations (SMF <-> UPFs) ---
+2026-03-04T07:27:45.874449791Z[36m [INFO][SMF][Main] [0mUPF(10.100.200.101) setup association
+2026-03-04T07:27:45.874957602Z[36m [INFO][SMF][Main] [0mUPF(10.100.200.102) setup association
+
+--- Pcap file: /home/arjit/ISEA/free5gc-compose/attack_poc/captures/attack_proof_20260304_125722.pcap ---
+Pcap not created (tcpdump in gNB or volume mount may have failed).
+PROOF VERDICT: No pcap - cannot prove attack. Ensure attack_poc/captures is mounted in ueransim-gnb.
+
+--- UE PDU session (uesimtun0) ---
+UE1: no uesimtun0
+UE2: no uesimtun0

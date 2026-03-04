@@ -1,0 +1,24 @@
+mcc: "208"
+mnc: "93"
+
+nci: "0x000000010"
+idLength: 32
+tac: 1
+
+# 0.0.0.0 so UE in another container can reach gNB for radio link simulation
+linkIp: 0.0.0.0
+ngapIp: gnb.free5gc.org
+gtpIp: gnb.free5gc.org
+
+amfConfigs:
+  - address: amf.free5gc.org
+    port: 38412
+
+# Support both S-NSSAIs so UE1 and UE2 can both attach
+slices:
+  - sst: 0x1
+    sd: 0x010203
+  - sst: 0x1
+    sd: 0x112233
+
+ignoreStreamIds: true

