@@ -19,3 +19,6 @@ ovf/packer/packer_cache/
 
 # virtual disk images
 *.vdi
+
+# experiment outputs
+experiments/runs/*.md
