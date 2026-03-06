@@ -6,3 +6,16 @@ base/free5gc
 
 # cert
 cert/*_*.pem
+
+# captures
+*.pcap
+
+# embedded git repo (clone contents tracked separately or use submodule)
+attack_poc/smf-build/smf
+
+# packer
+ovf/packer/logs/
+ovf/packer/packer_cache/
+
+# virtual disk images
+*.vdi

@@ -1,0 +1,29 @@
+#cloud-config
+autoinstall:
+  version: 1
+  identity:
+    hostname: free5gc-appliance
+    username: ubuntu
+    password: '$6$saltsalt$kKI9zw0imTw2iRQgdk5quElKIUv7/a0TlgxDpPJ.H3YR3xb/BjNi9MCyBhzo2s5heqmcCVaqmNoYSFbITEaux1'
+  ssh:
+    install-server: true
+    allow-pw: true
+  storage:
+    layout:
+      name: lvm
+  packages:
+    - openssh-server
+    - curl
+    - git
+    - jq
+    - make
+    - gcc
+    - net-tools
+    - iproute2
+    - python3
+    - python3-pip
+  late-commands:
+    # Set known password for Packer SSH and documentation (run in target)
+    - curtin in-target --target /target -- bash -c "echo 'ubuntu:free5gc' | chpasswd"
+    - curtin in-target --target /target -- sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config || true
+    - curtin in-target --target /target -- sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config || true

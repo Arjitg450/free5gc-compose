@@ -1,0 +1,42 @@
+#!/bin/bash
+# free5gc-status: show compose status, key ports, and last 200 lines of critical logs.
+set -euo pipefail
+
+COMPOSE_DIR="${COMPOSE_DIR:-/opt/free5gc-compose}"
+LOG_LINES="${LOG_LINES:-200}"
+
+if [ ! -d "${COMPOSE_DIR}" ]; then
+  echo "ERROR: ${COMPOSE_DIR} not found."
+  exit 1
+fi
+
+cd "${COMPOSE_DIR}"
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "bootcamp")
+
+if [ "${BRANCH}" = "ieee-10175424" ] && [ -f "attack_poc/docker-compose-attack.yaml" ]; then
+  COMPOSE_FILE="attack_poc/docker-compose-attack.yaml"
+  PROJECT_NAME="attack_poc"
+else
+  COMPOSE_FILE="docker-compose.yaml"
+  PROJECT_NAME="free5gc-compose"
+fi
+
+echo "=== free5gc-compose status (branch=${BRANCH}) ==="
+echo ""
+echo "--- docker compose ps ---"
+docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" ps
+echo ""
+echo "--- key ports (host) ---"
+ss -tlnp 2>/dev/null | grep -E '27017|38412|5000|5050|8805|2152' || true
+echo ""
+echo "--- last ${LOG_LINES} lines: amf ---"
+docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" logs --tail="${LOG_LINES}" amf 2>/dev/null || docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" logs --tail="${LOG_LINES}" free5gc-amf 2>/dev/null || true
+echo ""
+echo "--- last ${LOG_LINES} lines: smf ---"
+docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" logs --tail="${LOG_LINES}" smf 2>/dev/null || docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" logs --tail="${LOG_LINES}" free5gc-smf 2>/dev/null || true
+echo ""
+echo "--- last ${LOG_LINES} lines: upf ---"
+docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" logs --tail="${LOG_LINES}" upf 2>/dev/null || docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" logs --tail="${LOG_LINES}" free5gc-upf 2>/dev/null || true
+echo ""
+echo "--- last ${LOG_LINES} lines: ueransim (gNB) ---"
+docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" logs --tail="${LOG_LINES}" ueransim 2>/dev/null || docker compose -f "${COMPOSE_FILE}" --project-name "${PROJECT_NAME}" --project-directory "${COMPOSE_DIR}" logs --tail="${LOG_LINES}" ueransim-gnb 2>/dev/null || true

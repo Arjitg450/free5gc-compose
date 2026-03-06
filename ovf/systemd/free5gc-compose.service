@@ -1,0 +1,15 @@
+[Unit]
+Description=free5gc-compose stack (bootcamp or ieee-10175424)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/free5gc-compose/ovf/scripts/start-free5gc.sh
+TimeoutStartSec=300
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
