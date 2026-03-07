@@ -25,6 +25,7 @@ copy_local_repo() {
 
   chown -R root:root "${TARGET_DIR}"
   git config --global --add safe.directory "${TARGET_DIR}"
+  git -C "${TARGET_DIR}" worktree prune >/dev/null 2>&1 || true
 }
 
 resolve_branch_ref() {

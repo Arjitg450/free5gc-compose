@@ -60,6 +60,7 @@ esac
 echo "[branch-switch] Switching to branch: ${BRANCH}"
 cd "${TARGET_DIR}"
 git fetch origin
+git worktree prune >/dev/null 2>&1 || true
 
 echo "[branch-switch] Stopping both stack variants to avoid branch cross-contamination..."
 stop_stack "docker-compose.yaml" "free5gc-compose"
