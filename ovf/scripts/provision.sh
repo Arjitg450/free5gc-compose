@@ -49,6 +49,10 @@ if [ ! -d "${LOCAL_REPO_DIR}/.git" ] && [ -f /tmp/free5gc-compose-repo.tar ]; th
   rm -rf "${LOCAL_REPO_DIR}"
   mkdir -p "${LOCAL_REPO_DIR}"
   tar -xf /tmp/free5gc-compose-repo.tar -C "${LOCAL_REPO_DIR}"
+  if [ ! -d "${LOCAL_REPO_DIR}/.git" ] && [ -d "${LOCAL_REPO_DIR}/free5gc-compose/.git" ]; then
+    cp -a "${LOCAL_REPO_DIR}/free5gc-compose/." "${LOCAL_REPO_DIR}/"
+    rm -rf "${LOCAL_REPO_DIR}/free5gc-compose"
+  fi
 fi
 if [ ! -d "${LOCAL_REPO_DIR}/.git" ]; then
   echo "Expected staged local repo at ${LOCAL_REPO_DIR}, but it was not found." >&2
