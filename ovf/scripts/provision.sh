@@ -45,6 +45,15 @@ sysctl -p /etc/sysctl.d/99-free5gc.conf 2>/dev/null || true
 
 echo "=== Provision: Clone repo and pull images ==="
 chmod +x "${SCRIPT_DIR}/clone-and-pull.sh"
+if [ ! -d "${LOCAL_REPO_DIR}/.git" ] && [ -f /tmp/free5gc-compose-repo.tar ]; then
+  rm -rf "${LOCAL_REPO_DIR}"
+  mkdir -p "${LOCAL_REPO_DIR}"
+  tar -xf /tmp/free5gc-compose-repo.tar -C "${LOCAL_REPO_DIR}"
+fi
+if [ ! -d "${LOCAL_REPO_DIR}/.git" ]; then
+  echo "Expected staged local repo at ${LOCAL_REPO_DIR}, but it was not found." >&2
+  exit 1
+fi
 REPO_URL="${REPO_URL}" TARGET_DIR="${TARGET_DIR}" LOCAL_REPO_DIR="${LOCAL_REPO_DIR}" PULL_IMAGES=0 "${SCRIPT_DIR}/clone-and-pull.sh" "${BRANCH}"
 
 echo "=== Provision: Install systemd unit ==="
@@ -202,6 +211,7 @@ echo "=== Provision: Environment is ready for manual report walkthrough ==="
 
 echo "=== Provision: Clean up ==="
 rm -rf "${SCRIPT_DIR}"
+rm -f /tmp/free5gc-compose-repo.tar
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 

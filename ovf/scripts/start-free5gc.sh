@@ -8,6 +8,17 @@ COMPOSE_DIR="${COMPOSE_DIR:-/opt/free5gc-compose}"
 MAX_TRIES=5
 SLEEP=10
 
+resolve_branch_name() {
+  local requested="$1"
+
+  if [ "${requested}" = "ieee-10175424" ] && git -C "${COMPOSE_DIR}" show-ref --verify --quiet "refs/heads/feat/ieee-10175424"; then
+    echo "feat/ieee-10175424"
+    return 0
+  fi
+
+  echo "${requested}"
+}
+
 wait_for_docker() {
   local i=0
   while ! docker info >/dev/null 2>&1; do
@@ -30,20 +41,38 @@ do_compose_up() {
   fi
 }
 
+stop_inactive_projects() {
+  local active_project="$1"
+
+  if [ "${active_project}" != "free5gc-compose" ] && [ -f "${COMPOSE_DIR}/docker-compose.yaml" ]; then
+    docker compose --project-name free5gc-compose --project-directory "${COMPOSE_DIR}" down --remove-orphans >/dev/null 2>&1 || true
+  fi
+
+  if [ "${active_project}" != "attack_poc" ] && [ -f "${COMPOSE_DIR}/attack_poc/docker-compose-attack.yaml" ]; then
+    docker compose -f "${COMPOSE_DIR}/attack_poc/docker-compose-attack.yaml" \
+      --project-name attack_poc \
+      --project-directory "${COMPOSE_DIR}" \
+      down --remove-orphans >/dev/null 2>&1 || true
+  fi
+}
+
 echo "[start-free5gc] Waiting for Docker..."
 wait_for_docker || exit 1
 
 [ ! -d "${COMPOSE_DIR}" ] && { echo "[start-free5gc] ${COMPOSE_DIR} not found"; exit 1; }
 
 BRANCH=$(git -C "${COMPOSE_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "bootcamp")
+BRANCH=$(resolve_branch_name "${BRANCH}")
 
-if [ "${BRANCH}" = "ieee-10175424" ] && [ -f "${COMPOSE_DIR}/attack_poc/docker-compose-attack.yaml" ]; then
+if [ "${BRANCH}" = "ieee-10175424" ] || [ "${BRANCH}" = "feat/ieee-10175424" ]; then
   COMPOSE_FILE="attack_poc/docker-compose-attack.yaml"
   PROJECT_NAME="attack_poc"
 else
   COMPOSE_FILE="docker-compose.yaml"
   PROJECT_NAME="free5gc-compose"
 fi
+
+stop_inactive_projects "${PROJECT_NAME}"
 
 tries=0
 while [ $tries -lt $MAX_TRIES ]; do

@@ -100,8 +100,8 @@ build {
   }
 
   provisioner "file" {
-    source      = "../../"
-    destination = "/tmp"
+    source      = "free5gc-compose-repo.tar"
+    destination = "/tmp/free5gc-compose-repo.tar"
   }
 
   provisioner "shell" {
