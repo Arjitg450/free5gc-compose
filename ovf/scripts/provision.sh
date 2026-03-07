@@ -8,6 +8,9 @@ LOCAL_REPO_DIR="/tmp/free5gc-compose"
 REPO_URL="${REPO_URL:-https://github.com/Arjitg450/free5gc-compose.git}"
 TARGET_DIR="/opt/free5gc-compose"
 BRANCH="${BRANCH:-bootcamp}"
+TARGET_ARCH="${TARGET_ARCH:-unknown}"
+RELEASE_VERSION="${RELEASE_VERSION:-dev}"
+SUPPORTED_HYPERVISORS="${SUPPORTED_HYPERVISORS:-qemu}"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -42,6 +45,14 @@ chmod +x "${SCRIPT_DIR}/install-gtp5g.sh"
 echo "=== Provision: sysctl for forwarding ==="
 echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-free5gc.conf
 sysctl -p /etc/sysctl.d/99-free5gc.conf 2>/dev/null || true
+
+echo "=== Provision: Release metadata ==="
+cat >/etc/free5gc-release <<EOF
+FREE5GC_RELEASE_VERSION=${RELEASE_VERSION}
+FREE5GC_RELEASE_BRANCH=${BRANCH}
+FREE5GC_RELEASE_ARCH=${TARGET_ARCH}
+FREE5GC_SUPPORTED_HYPERVISORS=${SUPPORTED_HYPERVISORS}
+EOF
 
 echo "=== Provision: Clone repo and pull images ==="
 chmod +x "${SCRIPT_DIR}/clone-and-pull.sh"

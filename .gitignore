@@ -23,12 +23,14 @@ ovf/packer/packer_cache/
 
 # qemu/packer working files
 ovf/packer/output-qemu/
+ovf/packer/output-qemu-amd64/
 ovf/packer-qemu-build.*/
 ovf/packer/free5gc-local-repo.tar.gz
 ovf/packer/free5gc-compose-repo.tar
 ovf/packer/free5gc-images.tar
 ovf/packer/packer_rsa
 ovf/packer/packer_rsa.pub
+ovf/release/output/
 
 # macOS
 .DS_Store

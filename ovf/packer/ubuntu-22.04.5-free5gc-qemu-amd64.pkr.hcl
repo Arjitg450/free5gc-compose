@@ -1,7 +1,6 @@
-# Packer template: Ubuntu 22.04 ARM64 cloud image + free5gc-compose (QEMU/HVF)
+# Packer template: Ubuntu 22.04 AMD64 cloud image + free5gc-compose (QEMU/KVM)
 # Uses SMBIOS injection to pass NoCloud datasource URL to cloud-init.
-# No ISO installer, no keyboard input, no CIDATA ISO mount issues.
-# Build: packer init . && packer build ubuntu-22.04.5-free5gc-qemu.pkr.hcl
+# Build: packer init . && packer build ubuntu-22.04.5-free5gc-qemu-amd64.pkr.hcl
 
 packer {
   required_plugins {
@@ -14,7 +13,7 @@ packer {
 
 variable "vm_name" {
   type    = string
-  default = "ubuntu-22.04.5-free5gc"
+  default = "ubuntu-22.04.5-free5gc-amd64"
 }
 
 variable "memory" {
@@ -47,36 +46,45 @@ variable "release_version" {
   default = "dev"
 }
 
+variable "accelerator" {
+  type    = string
+  default = "kvm"
+}
+
+variable "efi_firmware_code" {
+  type    = string
+  default = "/usr/share/OVMF/OVMF_CODE.fd"
+}
+
+variable "efi_firmware_vars" {
+  type    = string
+  default = "/usr/share/OVMF/OVMF_VARS.fd"
+}
+
 source "qemu" "ubuntu" {
-  # Ubuntu 22.04 ARM64 cloud image (pre-installed, no ISO installer)
-  iso_url      = "https://cloud-images.ubuntu.com/releases/jammy/release/ubuntu-22.04-server-cloudimg-arm64.img"
-  iso_checksum = "sha256:0bdc35735c490ed1cf04f93b104fdf19eff7e5f4777d4dfdf777bc374ac32db8"
+  iso_url      = "https://cloud-images.ubuntu.com/releases/server/jammy/release/ubuntu-22.04-server-cloudimg-amd64.img"
+  iso_checksum = "sha256:e66ef756881b5e682c496112201382abd76291797a7395bf81fd1bd0888f5b6f"
   disk_image   = true
 
-  # Apple Silicon: HVF acceleration, native ARM64
-  qemu_binary  = "qemu-system-aarch64"
-  accelerator  = "hvf"
-  machine_type = "virt"
+  qemu_binary  = "qemu-system-x86_64"
+  accelerator  = var.accelerator
+  machine_type = "q35"
   cpu_model    = "host"
 
-  # ARM64 EFI firmware
   efi_boot          = true
-  efi_firmware_code = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
-  efi_firmware_vars = "/opt/homebrew/share/qemu/edk2-arm-vars.fd"
+  efi_firmware_code = var.efi_firmware_code
+  efi_firmware_vars = var.efi_firmware_vars
 
   memory    = var.memory
   cpus      = var.cpus
   disk_size = var.disk_size
   format    = "qcow2"
 
-  output_directory = "output-qemu"
+  output_directory = "output-qemu-amd64"
   vm_name          = "${var.vm_name}.qcow2"
 
-  # Serve cloud-init user-data/meta-data via Packer's HTTP server
   http_directory = "cloudinit"
 
-  # SMBIOS injection: tells cloud-init to use nocloud datasource from Packer's HTTP server.
-  # This is the reliable way to seed cloud-init on QEMU - no CIDATA ISO needed.
   qemuargs = [
     ["-smbios", "type=1,serial=ds=nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/"]
   ]
@@ -96,7 +104,7 @@ source "qemu" "ubuntu" {
 }
 
 build {
-  name    = "free5gc-qemu"
+  name    = "free5gc-qemu-amd64"
   sources = ["source.qemu.ubuntu"]
 
   provisioner "file" {
@@ -119,7 +127,7 @@ build {
     environment_vars = [
       "REPO_URL=${var.repo_url}",
       "BRANCH=${var.branch}",
-      "TARGET_ARCH=arm64",
+      "TARGET_ARCH=amd64",
       "RELEASE_VERSION=${var.release_version}",
       "SUPPORTED_HYPERVISORS=qemu,virtualbox,vmware"
     ]
