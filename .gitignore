@@ -19,6 +19,17 @@ ovf/packer/packer_cache/
 
 # virtual disk images
 *.vdi
+*.qcow2
+
+# qemu/packer working files
+ovf/packer/output-qemu/
+ovf/packer-qemu-build.*/
+ovf/packer/free5gc-local-repo.tar.gz
+ovf/packer/packer_rsa
+ovf/packer/packer_rsa.pub
+
+# macOS
+.DS_Store
 
 # experiment outputs
 experiments/runs/*.md

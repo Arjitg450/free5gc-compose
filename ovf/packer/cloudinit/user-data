@@ -1,0 +1,25 @@
+#cloud-config
+hostname: free5gc-appliance
+manage_etc_hosts: true
+
+users:
+  - name: ubuntu
+    passwd: "$6$saltsalt$kKI9zw0imTw2iRQgdk5quElKIUv7/a0TlgxDpPJ.H3YR3xb/BjNi9MCyBhzo2s5heqmcCVaqmNoYSFbITEaux1"
+    lock_passwd: false
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    groups: [sudo, docker]
+
+ssh_pwauth: true
+
+chpasswd:
+  expire: false
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-packer.conf
+    content: |
+      PasswordAuthentication yes
+      PermitRootLogin no
+
+runcmd:
+  - systemctl restart ssh

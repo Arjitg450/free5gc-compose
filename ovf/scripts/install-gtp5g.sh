@@ -10,7 +10,7 @@ apt-get install -y -qq linux-headers-"$(uname -r)" build-essential git
 echo "[gtp5g] Cloning and building gtp5g..."
 GTP5G_DIR=/tmp/gtp5g
 rm -rf "${GTP5G_DIR}"
-git clone --depth 1 https://github.com/free5gc/gtp5g.git "${GTP5G_DIR}"
+git clone --branch v0.9.5 --depth 1 https://github.com/free5gc/gtp5g.git "${GTP5G_DIR}"
 cd "${GTP5G_DIR}"
 make
 make install
