@@ -59,8 +59,9 @@ REPO_URL="${REPO_URL}" TARGET_DIR="${TARGET_DIR}" LOCAL_REPO_DIR="${LOCAL_REPO_D
 echo "=== Provision: Install systemd unit ==="
 cp "${TARGET_DIR}/ovf/systemd/free5gc-compose.service" /etc/systemd/system/
 chmod 644 /etc/systemd/system/free5gc-compose.service
-# Ensure start script is executable
-chmod +x "${TARGET_DIR}/ovf/scripts/start-free5gc.sh"
+cp "${TARGET_DIR}/ovf/scripts/start-free5gc.sh" /usr/local/bin/start-free5gc.sh
+cp "${TARGET_DIR}/ovf/scripts/branch-switch.sh" /usr/local/bin/branch-switch.sh
+chmod 755 /usr/local/bin/start-free5gc.sh /usr/local/bin/branch-switch.sh
 systemctl daemon-reload
 systemctl enable free5gc-compose.service
 
