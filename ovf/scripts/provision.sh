@@ -76,6 +76,7 @@ cp "${SCRIPT_DIR}/e2e-test.sh" /usr/local/bin/
 chmod 755 /usr/local/bin/free5gc-status /usr/local/bin/self-test.sh /usr/local/bin/e2e-test.sh
 
 echo "=== Provision: Install branch-switch.sh into repo for user convenience ==="
+chmod +x "${TARGET_DIR}/ovf/scripts/start-free5gc.sh"
 chmod +x "${TARGET_DIR}/ovf/scripts/branch-switch.sh"
 
 if [ -f /tmp/free5gc-images.tar ]; then
