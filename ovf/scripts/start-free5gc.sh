@@ -29,6 +29,19 @@ wait_for_docker() {
   return 0
 }
 
+ensure_container_tools() {
+  local branch="$1"
+
+  if [ "${branch}" = "bootcamp" ]; then
+    if docker ps --format '{{.Names}}' | grep -qx 'ueransim'; then
+      if ! docker exec ueransim bash -lc 'command -v curl >/dev/null 2>&1'; then
+        echo "[start-free5gc] Installing curl in ueransim container..."
+        docker exec ueransim bash -lc 'apt-get update >/dev/null && apt-get install -y curl >/dev/null'
+      fi
+    fi
+  fi
+}
+
 do_compose_up() {
   local project_dir="$1"
   local compose_file="$2"
@@ -77,6 +90,7 @@ stop_inactive_projects "${PROJECT_NAME}"
 tries=0
 while [ $tries -lt $MAX_TRIES ]; do
   if do_compose_up "${COMPOSE_DIR}" "${COMPOSE_FILE}" "${PROJECT_NAME}"; then
+    ensure_container_tools "${BRANCH}"
     echo "[start-free5gc] Stack started (branch=${BRANCH})."
     exit 0
   fi
