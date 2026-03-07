@@ -13,7 +13,7 @@ fi
 cd "${COMPOSE_DIR}"
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "bootcamp")
 
-if [ "${BRANCH}" = "ieee-10175424" ] && [ -f "attack_poc/docker-compose-attack.yaml" ]; then
+if { [ "${BRANCH}" = "ieee-10175424" ] || [ "${BRANCH}" = "feat/ieee-10175424" ]; } && [ -f "attack_poc/docker-compose-attack.yaml" ]; then
   COMPOSE_FILE="attack_poc/docker-compose-attack.yaml"
   PROJECT_NAME="attack_poc"
 else

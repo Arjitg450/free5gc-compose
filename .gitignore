@@ -25,6 +25,7 @@ ovf/packer/packer_cache/
 ovf/packer/output-qemu/
 ovf/packer-qemu-build.*/
 ovf/packer/free5gc-local-repo.tar.gz
+ovf/packer/free5gc-images.tar
 ovf/packer/packer_rsa
 ovf/packer/packer_rsa.pub
 

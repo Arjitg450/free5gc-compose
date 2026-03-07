@@ -74,9 +74,14 @@ chmod 755 /usr/local/bin/free5gc-status /usr/local/bin/self-test.sh /usr/local/b
 echo "=== Provision: Install branch-switch.sh into repo for user convenience ==="
 chmod +x "${TARGET_DIR}/ovf/scripts/branch-switch.sh"
 
-echo "=== Provision: Pull prebuilt container images ==="
-cd "${TARGET_DIR}"
-docker compose pull
+if [ -f /tmp/free5gc-images.tar ]; then
+  echo "=== Provision: Load offline container images ==="
+  docker load -i /tmp/free5gc-images.tar
+else
+  echo "=== Provision: Pull prebuilt container images ==="
+  cd "${TARGET_DIR}"
+  docker compose pull
+fi
 
 echo "=== Provision: Start compose stack ==="
 COMPOSE_DIR="${TARGET_DIR}" "${TARGET_DIR}/ovf/scripts/start-free5gc.sh"
@@ -213,6 +218,7 @@ echo "=== Provision: Environment is ready for manual report walkthrough ==="
 echo "=== Provision: Clean up ==="
 rm -rf "${SCRIPT_DIR}"
 rm -f /tmp/free5gc-compose-repo.tar
+rm -f /tmp/free5gc-images.tar
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 

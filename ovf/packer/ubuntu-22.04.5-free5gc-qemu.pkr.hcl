@@ -104,8 +104,13 @@ build {
     destination = "/tmp/free5gc-compose-repo.tar"
   }
 
+  provisioner "file" {
+    source      = "free5gc-images.tar"
+    destination = "/tmp/free5gc-images.tar"
+  }
+
   provisioner "shell" {
-    execute_command  = "echo 'free5gc' | {{ .Vars }} sudo -S -E bash '{{ .Path }}'"
+    execute_command = "echo 'free5gc' | {{ .Vars }} sudo -S -E bash '{{ .Path }}'"
     environment_vars = [
       "REPO_URL=${var.repo_url}",
       "BRANCH=${var.branch}"
