@@ -48,17 +48,22 @@ variable "release_version" {
 
 variable "accelerator" {
   type    = string
-  default = "kvm"
+  default = "tcg"
+}
+
+variable "cpu_model" {
+  type    = string
+  default = "max"
 }
 
 variable "efi_firmware_code" {
   type    = string
-  default = "/usr/share/OVMF/OVMF_CODE.fd"
+  default = "/opt/homebrew/Cellar/qemu/10.2.1/share/qemu/edk2-x86_64-code.fd"
 }
 
 variable "efi_firmware_vars" {
   type    = string
-  default = "/usr/share/OVMF/OVMF_VARS.fd"
+  default = "/opt/homebrew/Cellar/qemu/10.2.1/share/qemu/edk2-i386-vars.fd"
 }
 
 source "qemu" "ubuntu" {
@@ -69,7 +74,7 @@ source "qemu" "ubuntu" {
   qemu_binary  = "qemu-system-x86_64"
   accelerator  = var.accelerator
   machine_type = "q35"
-  cpu_model    = "host"
+  cpu_model    = var.cpu_model
 
   efi_boot          = true
   efi_firmware_code = var.efi_firmware_code
