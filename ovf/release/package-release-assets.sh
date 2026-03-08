@@ -43,6 +43,21 @@ sha256_file() {
   fi
 }
 
+copy_qcow2_asset() {
+  local src="$1"
+  local dst="$2"
+
+  if cp -c "$src" "$dst" 2>/dev/null; then
+    return 0
+  fi
+
+  if cp --reflink=auto "$src" "$dst" 2>/dev/null; then
+    return 0
+  fi
+
+  cp "$src" "$dst"
+}
+
 file_size_bytes() {
   stat -f%z "$1" 2>/dev/null || stat -c%s "$1"
 }
@@ -139,14 +154,19 @@ if [ "$AVAILABLE_FREE_BYTES" -lt "$REQUIRED_FREE_BYTES" ]; then
   exit 1
 fi
 
-echo "[release] Copying qcow2..."
-cp "$QCOW2" "$QCOW2_OUT"
-
 echo "[release] Converting qcow2 -> vmdk..."
-qemu-img convert -p -O vmdk -o subformat=streamOptimized "$QCOW2_OUT" "$VMDK_OUT"
+qemu-img convert -p -O vmdk -o subformat=streamOptimized "$QCOW2" "$VMDK_OUT" &
+VMDK_PID=$!
 
 echo "[release] Converting qcow2 -> vdi..."
-qemu-img convert -p -O vdi "$QCOW2_OUT" "$VDI_OUT"
+qemu-img convert -p -O vdi "$QCOW2" "$VDI_OUT" &
+VDI_PID=$!
+
+wait "$VMDK_PID"
+wait "$VDI_PID"
+
+echo "[release] Creating qcow2 release asset..."
+copy_qcow2_asset "$QCOW2" "$QCOW2_OUT"
 
 VMDK_SIZE_BYTES="$(file_size_bytes "$VMDK_OUT")"
 
