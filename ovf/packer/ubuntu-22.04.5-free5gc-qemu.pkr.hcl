@@ -110,7 +110,7 @@ build {
   }
 
   provisioner "file" {
-    source      = "free5gc-images.tar"
+    source      = "free5gc-images-arm64.tar"
     destination = "/tmp/free5gc-images.tar"
   }
 

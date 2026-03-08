@@ -28,9 +28,12 @@ ovf/packer-qemu-build.*/
 ovf/packer/free5gc-local-repo.tar.gz
 ovf/packer/free5gc-compose-repo.tar
 ovf/packer/free5gc-images.tar
+ovf/packer/free5gc-images-arm64.tar
+ovf/packer/free5gc-images-amd64.tar
 ovf/packer/packer_rsa
 ovf/packer/packer_rsa.pub
 ovf/release/output/
+manifest.json
 
 # macOS
 .DS_Store
