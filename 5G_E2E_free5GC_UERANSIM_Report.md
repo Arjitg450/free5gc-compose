@@ -280,7 +280,7 @@ Before starting the core, understand what each container does and how they inter
 ### 3.1 Pull Images and Start All Containers
 
 ```bash
-cd ~/free5gc-compose
+cd /opt/free5gc-compose
 
 # Pull the latest container images
 docker compose pull
