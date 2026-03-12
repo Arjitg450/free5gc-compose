@@ -81,7 +81,7 @@ After Attack:    UE1→UPF2    UE2→UPF1    ← SWAPPED!
 | `run_attack_from_scratch.sh` | One-shot: tear down, bring up, provision, UE1→UE2, capture N3 pcap, proof report (run with `sudo` for pcap) |
 | `run_attack_with_pcap.sh` | Wrapper that runs `sudo ./attack_poc/run_attack_from_scratch.sh` for capture-enabled proof run |
 | `SINGLE_COMMAND_ATTACK_TUTORIAL.md` | Separate markdown tutorial for the existing one-command attack workflow (`./attack_poc/run_attack.sh`) |
-| `VDI_ATTACK_COMMANDS.md` | Minimal command-only VDI runbook for branch switch, attack run, capture run, and rollback |
+| `VDI_ATTACK_COMMANDS.md` | Single self-contained student VDI tutorial with manual NIC recovery, repo update, attack run, verification, and rollback |
 | `verify_attack.sh` | Captures N3 GTP-U traffic and analyzes TEID swap |
 | `rollback.sh` | Tears down attack and restores original deployment |
 

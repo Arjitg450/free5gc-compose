@@ -142,7 +142,7 @@ If you want the attack lab walkthrough as a separate markdown file for the curre
 
 ### VDI command-only tutorial
 
-If you only want the exact command list to run in the VDI, use [attack_poc/VDI_ATTACK_COMMANDS.md](./attack_poc/VDI_ATTACK_COMMANDS.md).
+If you want the single self-contained student VDI guide, use [attack_poc/VDI_ATTACK_COMMANDS.md](./attack_poc/VDI_ATTACK_COMMANDS.md). It includes manual NIC recovery, repo update commands for older VDIs, attack run, verification, and rollback.
 
 ### How To Inspect Conflicting Docker Networks
 
