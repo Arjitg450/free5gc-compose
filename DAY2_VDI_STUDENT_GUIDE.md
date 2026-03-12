@@ -4,6 +4,7 @@ This guide is only for Day 2 on the VDI appliance. It covers:
 
 - switching the repo to `bootcamp`
 - verifying the core is running
+- showing a before/after comparison between baseline and secure behavior
 - running the UE attach for Day 2
 - proving that authentication and NAS security are working
 
@@ -84,7 +85,7 @@ Expected:
 - the core containers show `Up`
 - the `ueransim` container is running
 
-## 5. Confirm the Day 2 security config
+## 5. Confirm the secure Day 2 default config
 
 Run:
 
@@ -102,27 +103,113 @@ You should see:
 - `protectionScheme: 1`
 - `homeNetworkPublicKeyId: 1`
 
-## 6. Run the Day 2 UE attach
+## 6. Before vs After Comparison
 
-Restart AMF and gNB first so the logs are clean:
+This is the comparison students should be able to show after running both modes.
+
+| Check | Baseline (Before) | Secure (After) |
+| --- | --- | --- |
+| AMF ciphering priority | `NEA0` first | `NEA2` first |
+| UE identity protection | SUCI disabled | SUCI Profile A enabled |
+| UE log selection | `Selected integrity[2] ciphering[0]` | `Selected integrity[2] ciphering[2]` |
+| AMF identity line | `suci-0-208-93-0000-0-0-0000000001` | `suci-0-208-93-0000-1-1-<encrypted blob>` |
+| `strings` on N2-only capture | prints `internet` | no output |
+
+Verified on the VDI during testing:
+
+- baseline UE log: `Selected integrity[2] ciphering[0]`
+- secure UE log: `Selected integrity[2] ciphering[2]`
+- baseline N2-only pcap: `strings /tmp/day2_baseline_n2.pcap | grep internet` printed `internet`
+- secure N2-only pcap: `strings /tmp/day2_secure_n2.pcap | grep internet` printed nothing
+
+## 7. Run the baseline comparison pass
+
+This temporarily downgrades Day 2 so students can see the insecure behavior first.
+
+```bash
+cd /opt/free5gc-compose
+cp config/amfcfg.yaml /tmp/amfcfg.day2.bak
+cp config/uecfg.yaml /tmp/uecfg.day2.bak
+python3 - <<'PY'
+from pathlib import Path
+p = Path('config/amfcfg.yaml')
+s = p.read_text()
+s = s.replace(
+    "    cipheringOrder: # the priority of ciphering algorithms\n      - NEA2\n      - NEA0",
+    "    cipheringOrder: # the priority of ciphering algorithms\n      - NEA0\n      - NEA2",
+)
+p.write_text(s)
+PY
+python3 - <<'PY'
+from pathlib import Path
+p = Path('config/uecfg.yaml')
+s = p.read_text()
+s = s.replace('\nprotectionScheme: 1\n', '\n# protectionScheme: 1\n')
+s = s.replace('\nhomeNetworkPublicKeyId: 1\n', '\n# homeNetworkPublicKeyId: 1\n')
+s = s.replace(
+    '\nhomeNetworkPublicKey: "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"\n',
+    '\n# homeNetworkPublicKey: "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"\n',
+)
+p.write_text(s)
+PY
+docker restart amf ueransim
+sleep 8
+echo free5gc | sudo -S bash -lc 'rm -f /tmp/day2_baseline_n2.pcap /tmp/day2_baseline_n2.pid /tmp/day2_baseline_n2.log; nohup tcpdump -i br-free5gc -w /tmp/day2_baseline_n2.pcap host 10.100.200.12 and host 10.100.200.16 >/tmp/day2_baseline_n2.log 2>&1 & echo $! >/tmp/day2_baseline_n2.pid'
+docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue_baseline.log 2>&1 &'
+sleep 20
+echo free5gc | sudo -S bash -lc 'kill $(cat /tmp/day2_baseline_n2.pid)'
+docker exec ueransim tail -n 40 /tmp/ue_baseline.log
+docker compose logs --since 3m free5gc-amf | grep -E 'SUCI|Registration|Authentication|Security Mode|MobileIdentity5GS'
+strings /tmp/day2_baseline_n2.pcap | grep internet
+```
+
+Expected baseline proof:
+
+- UE log shows `Selected integrity[2] ciphering[0]`
+- AMF log shows `MobileIdentity5GS: SUCI[suci-0-208-93-0000-0-0-0000000001]`
+- `strings /tmp/day2_baseline_n2.pcap | grep internet` prints `internet`
+
+## 8. Restore secure mode and run the Day 2 secure pass
+
+Restore the original secure config first:
+
+```bash
+cd /opt/free5gc-compose
+cp /tmp/amfcfg.day2.bak config/amfcfg.yaml
+cp /tmp/uecfg.day2.bak config/uecfg.yaml
+```
+
+Then run the secure pass:
 
 ```bash
 cd /opt/free5gc-compose
 docker restart amf ueransim
 sleep 8
+echo free5gc | sudo -S bash -lc 'rm -f /tmp/day2_secure_n2.pcap /tmp/day2_secure_n2.pid /tmp/day2_secure_n2.log; nohup tcpdump -i br-free5gc -w /tmp/day2_secure_n2.pcap host 10.100.200.12 and host 10.100.200.16 >/tmp/day2_secure_n2.log 2>&1 & echo $! >/tmp/day2_secure_n2.pid'
+docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue_secure.log 2>&1 &'
+sleep 20
+echo free5gc | sudo -S bash -lc 'kill $(cat /tmp/day2_secure_n2.pid)'
+docker exec ueransim tail -n 40 /tmp/ue_secure.log
+docker compose logs --since 3m free5gc-amf | grep -E 'SUCI|Registration|Authentication|Security Mode|MobileIdentity5GS'
+strings /tmp/day2_secure_n2.pcap | grep internet
 ```
 
-Start the UE:
+Expected secure proof:
+
+- UE log shows `Selected integrity[2] ciphering[2]`
+- AMF log shows `MobileIdentity5GS: SUCI[suci-0-208-93-0000-1-1-...]`
+- `strings /tmp/day2_secure_n2.pcap | grep internet` prints no output
+
+## 9. Run the Day 2 secure attach only
+
+If you only want the final secure Day 2 attach and not the full comparison, use the secure defaults and run:
 
 ```bash
 cd /opt/free5gc-compose
+docker restart amf ueransim
+sleep 8
 docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue.log 2>&1 &'
 sleep 12
-```
-
-Check the UE log:
-
-```bash
 docker exec ueransim tail -n 80 /tmp/ue.log
 ```
 
@@ -137,13 +224,7 @@ Initial Registration is successful
 PDU Session establishment is successful
 ```
 
-What this means:
-
-- `integrity[2]` means `NIA2`
-- `ciphering[2]` means `NEA2`
-- the UE was authenticated and NAS ciphering was enabled
-
-## 7. Check the AMF proof
+## 10. Check the AMF proof
 
 Run:
 
@@ -164,13 +245,7 @@ Send Registration Accept
 Handle Registration Complete
 ```
 
-What this proves:
-
-- the UE identity arrived as SUCI, not cleartext IMSI
-- the AMF executed authentication
-- the AMF completed the NAS security mode procedure
-
-## 8. Capture clean proof on the VDI host
+## 11. Capture clean proof on the VDI host
 
 Important:
 
@@ -178,71 +253,40 @@ Important:
 - the full bridge also carries internal HTTP/SBI traffic, which includes the word `internet`
 - for Day 2 proof, capture only the N2 path between gNB and AMF
 
-Restart AMF and gNB again:
-
-```bash
-cd /opt/free5gc-compose
-docker restart amf ueransim
-sleep 8
-```
-
-Start an N2-only capture on the VDI host:
-
-```bash
-echo free5gc | sudo -S bash -lc 'rm -f /tmp/day2_n2_only.pcap /tmp/day2_n2_only.pid /tmp/day2_n2_only.log; nohup tcpdump -i br-free5gc -w /tmp/day2_n2_only.pcap host 10.100.200.12 and host 10.100.200.16 >/tmp/day2_n2_only.log 2>&1 & echo $! >/tmp/day2_n2_only.pid'
-```
-
-Trigger the UE attach:
-
-```bash
-cd /opt/free5gc-compose
-docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue.log 2>&1 &'
-sleep 20
-```
-
-Stop the capture:
-
-```bash
-echo free5gc | sudo -S bash -lc 'kill $(cat /tmp/day2_n2_only.pid)'
-```
+Use either `/tmp/day2_baseline_n2.pcap` or `/tmp/day2_secure_n2.pcap` from the comparison steps above.
 
 Check the proof:
 
 ```bash
-ls -lh /tmp/day2_n2_only.pcap
-strings /tmp/day2_n2_only.pcap | grep internet
-sudo tcpdump -nn -r /tmp/day2_n2_only.pcap -c 20
+ls -lh /tmp/day2_baseline_n2.pcap /tmp/day2_secure_n2.pcap
+strings /tmp/day2_baseline_n2.pcap | grep internet
+strings /tmp/day2_secure_n2.pcap | grep internet
+sudo tcpdump -nn -r /tmp/day2_secure_n2.pcap -c 20
 ```
 
 Expected:
 
-- the pcap file exists and is non-zero in size
-- `strings /tmp/day2_n2_only.pcap | grep internet` prints no output
-- `tcpdump -nn -r /tmp/day2_n2_only.pcap -c 20` shows SCTP packets between:
-  - `10.100.200.12`
-  - `10.100.200.16`
+- baseline pcap is non-zero and prints `internet`
+- secure pcap is non-zero and prints no `internet`
+- `tcpdump -nn -r /tmp/day2_secure_n2.pcap -c 20` shows SCTP packets between `10.100.200.12` and `10.100.200.16`
 
-Why this matters:
+## 12. What students should conclude
 
-- the UE still requested a PDU session
-- but in the N2-only capture, the readable `internet` string is not visible
-- that is the clean proof that the NAS content is no longer exposed in plain text on the control path being tested
+If all checks above pass, students have proved both sides of the comparison:
 
-## 9. What students should conclude
+- baseline: NAS messages were only integrity protected and the requested DNN name stayed visible on the N2 capture
+- secure: NAS messages were encrypted with `NEA2` and the requested DNN name was no longer visible on the N2 capture
 
-If all checks above pass, students have proved:
+Students have also proved:
 
 1. the VDI is on the `bootcamp` branch
 2. the free5GC stack is healthy
-3. the UE completed authentication successfully
-4. the AMF saw a SUCI, not a clear IMSI
-5. the Security Mode procedure completed
-6. the UE negotiated `NIA2` plus `NEA2`
-7. the N2 capture does not expose the `internet` string in plain text
+3. the UE completed authentication successfully in both runs
+4. the AMF saw scheme `0` in the baseline run and scheme `1` in the secure run
+5. the Security Mode procedure completed in both runs
+6. the secure run negotiated `NIA2` plus `NEA2`
 
-That is the Day 2 proof that authentication and NAS security are working.
-
-## 10. One-command proof checklist
+## 13. One-command proof checklist
 
 If you only want the shortest command set, run these in order:
 
@@ -250,17 +294,45 @@ If you only want the shortest command set, run these in order:
 cd /opt/free5gc-compose
 echo free5gc | sudo -S bash /opt/free5gc-compose/ovf/scripts/branch-switch.sh bootcamp
 self-test.sh
+cp config/amfcfg.yaml /tmp/amfcfg.day2.bak
+cp config/uecfg.yaml /tmp/uecfg.day2.bak
+python3 - <<'PY'
+from pathlib import Path
+p = Path('config/amfcfg.yaml')
+s = p.read_text().replace(
+    "    cipheringOrder: # the priority of ciphering algorithms\n      - NEA2\n      - NEA0",
+    "    cipheringOrder: # the priority of ciphering algorithms\n      - NEA0\n      - NEA2",
+)
+p.write_text(s)
+PY
+python3 - <<'PY'
+from pathlib import Path
+p = Path('config/uecfg.yaml')
+s = p.read_text()
+s = s.replace('\nprotectionScheme: 1\n', '\n# protectionScheme: 1\n')
+s = s.replace('\nhomeNetworkPublicKeyId: 1\n', '\n# homeNetworkPublicKeyId: 1\n')
+s = s.replace(
+    '\nhomeNetworkPublicKey: "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"\n',
+    '\n# homeNetworkPublicKey: "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"\n',
+)
+p.write_text(s)
+PY
 docker restart amf ueransim
 sleep 8
-docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue.log 2>&1 &'
-sleep 12
-docker exec ueransim tail -n 80 /tmp/ue.log
-docker compose logs --since 3m free5gc-amf | grep -E 'SUCI|Registration|Authentication|Security Mode'
-echo free5gc | sudo -S bash -lc 'rm -f /tmp/day2_n2_only.pcap /tmp/day2_n2_only.pid /tmp/day2_n2_only.log; nohup tcpdump -i br-free5gc -w /tmp/day2_n2_only.pcap host 10.100.200.12 and host 10.100.200.16 >/tmp/day2_n2_only.log 2>&1 & echo $! >/tmp/day2_n2_only.pid'
-docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue.log 2>&1 &'
+echo free5gc | sudo -S bash -lc 'rm -f /tmp/day2_baseline_n2.pcap /tmp/day2_baseline_n2.pid; nohup tcpdump -i br-free5gc -w /tmp/day2_baseline_n2.pcap host 10.100.200.12 and host 10.100.200.16 >/tmp/day2_baseline_n2.log 2>&1 & echo $! >/tmp/day2_baseline_n2.pid'
+docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue_baseline.log 2>&1 &'
 sleep 20
-echo free5gc | sudo -S bash -lc 'kill $(cat /tmp/day2_n2_only.pid)'
-strings /tmp/day2_n2_only.pcap | grep internet
-sudo tcpdump -nn -r /tmp/day2_n2_only.pcap -c 20
+echo free5gc | sudo -S bash -lc 'kill $(cat /tmp/day2_baseline_n2.pid)'
+cp /tmp/amfcfg.day2.bak config/amfcfg.yaml
+cp /tmp/uecfg.day2.bak config/uecfg.yaml
+docker restart amf ueransim
+sleep 8
+echo free5gc | sudo -S bash -lc 'rm -f /tmp/day2_secure_n2.pcap /tmp/day2_secure_n2.pid; nohup tcpdump -i br-free5gc -w /tmp/day2_secure_n2.pcap host 10.100.200.12 and host 10.100.200.16 >/tmp/day2_secure_n2.log 2>&1 & echo $! >/tmp/day2_secure_n2.pid'
+docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue_secure.log 2>&1 &'
+sleep 20
+echo free5gc | sudo -S bash -lc 'kill $(cat /tmp/day2_secure_n2.pid)'
+docker exec ueransim grep -E 'Selected integrity|Initial Registration is successful|PDU Session establishment is successful' /tmp/ue_baseline.log /tmp/ue_secure.log
+docker compose logs --since 5m free5gc-amf | grep -E 'MobileIdentity5GS|Authentication|Security Mode|Registration'
+strings /tmp/day2_baseline_n2.pcap | grep internet
+strings /tmp/day2_secure_n2.pcap | grep internet
 ```
-

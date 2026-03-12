@@ -1,188 +1,206 @@
 # 5G Security Student Laboratory Guide
 
-**Topic:** Verifying NAS Security (Encryption) and UE Identity Protection (SUCI) in free5GC.
+**Topic:** Verifying before-and-after NAS security behavior and UE identity protection (SUCI) in free5GC.
 
 ## 1. Lab Objective
 
-In this lab, you will demonstrate the difference between an **Insecure (Baseline)** 5G network and a **Secure** 5G network. You will configure the AMF and UE to switch between these states and capture network traffic (PCAP) to prove that security features are working.
+In this lab, students demonstrate the difference between an insecure baseline and a secure Day 2 configuration on the VDI appliance.
 
-## 2. Prerequisites
+The comparison is the point of the lab:
 
-* **Environment**: A working instance of `free5gc-compose` with `ueransim`.
-* **Tools**: `docker`, `docker-compose`, `tcpdump` (inside containers), `wireshark` or `tshark`.
+- **Before**: `NEA0` is prioritized and SUCI is disabled
+- **After**: `NEA2` is prioritized and SUCI Profile A is enabled
 
----
+## 2. Verified Comparison Summary
 
-## 3. Part 1: Baseline Configuration (The "Vulnerable" Setup)
+These are the exact results verified on the VDI while testing this guide.
 
-### Step 3.1: Configure AMF for Null Encryption
+| Check | Baseline (Before) | Secure (After) |
+| --- | --- | --- |
+| UE algorithm line | `Selected integrity[2] ciphering[0]` | `Selected integrity[2] ciphering[2]` |
+| AMF identity line | `suci-0-208-93-0000-0-0-0000000001` | `suci-0-208-93-0000-1-1-<encrypted blob>` |
+| `strings` on N2-only pcap | prints `internet` | no output |
+| Meaning | integrity only, no NAS ciphering | integrity plus NAS ciphering |
 
-Open `config/amfcfg.yaml`. Locate the `security` section and prioritize `NEA0` (Null Encryption).
+## 3. Prerequisites
 
-```yaml
-  security:
-    integrityOrder:
-      - NIA2
-    cipheringOrder:
-      - NEA0  # <-- Priority 1: Null Encryption (No Security)
-      - NEA2
-```
+- VDI accessible with `ssh -F NUL -p 2222 ubuntu@127.0.0.1`
+- password `free5gc`
+- `bootcamp` branch checked out on `/opt/free5gc-compose`
+- Docker stack healthy
 
-### Step 3.2: Configure UE to Disable Protection
-
-Open `config/uecfg.yaml`. Comment out or remove the SUCI protection parameters.
-
-```yaml
-# SUCI Protection Scheme
-# protectionScheme: 1
-# homeNetworkPublicKeyId: 1
-# homeNetworkPublicKey: "..."
-```
-
-### Step 3.3: Run & Capture Evidence
-
-Run the following commands to start the capture and register the UE.
+Recommended startup commands:
 
 ```bash
-# 1. Restart Core Network & UE Simulator
-cd free5gc-compose
-docker restart amf ueransim
-
-# 2. Start Packet Capture (Background)
-# We capture on 'any' interface inside the UE container to see the traffic.
-docker exec ueransim tcpdump -i any -w /ueransim/baseline.pcap &
-
-# 3. Register the UE
-docker exec ueransim ./nr-ue -c ./config/uecfg.yaml
-
-# 4. Stop Capture (After registration completes ~10s)
-docker exec ueransim pkill tcpdump
-docker cp ueransim:/ueransim/baseline.pcap captures/baseline.pcap
+sudo ip link set enp0s3 up
+sudo dhclient -v enp0s3
+ip -4 -br a show enp0s3
+cd /opt/free5gc-compose
+sudo chown -R ubuntu:ubuntu /opt/free5gc-compose
+git fetch origin
+git switch bootcamp || git switch -c bootcamp --track origin/bootcamp
+git reset --hard origin/bootcamp
+echo free5gc | sudo -S bash /opt/free5gc-compose/ovf/scripts/branch-switch.sh bootcamp
+self-test.sh
+docker compose ps
 ```
 
-### Step 3.4: Verification (The "Leak")
+## 4. Why host capture is required on this VDI
 
-**Evidence 1: Cleartext Identity (IMSI)**
+Do not rely on `tcpdump` inside the `ueransim` container for this VDI image.
 
-* **Log**: Check `captures/amf_baseline.log`. You will see `MobileIdentity5GS: SUPI[imsi-20893...]`.
-* **Wireshark**: Open `baseline.pcap`. Filter: `nas_5gs.mm.message_type == 0x41` (Registration Request).
-  * Expand `5GS Mobile Identity`.
-  * **Observation**: `Protection scheme Id: NULL scheme (0)`.
-  * **Result**: The IMSI (Subscriber ID) is visible in plain text.
+Use host capture on `br-free5gc` instead. For a clean NAS comparison, capture only the N2 path between:
 
-**Evidence 2: Readable Data ("internet")**
+- gNB: `10.100.200.12`
+- AMF: `10.100.200.16`
 
-* **Command Line Test**: Run `strings captures/baseline.pcap | grep "internet"`.
-* **Result**: You will see the word `internet` printed multiple times. This confirms user activity (requesting the "internet" slice) is readable.
+That avoids mixing in unrelated SBI/HTTP traffic from the rest of the core.
 
----
+## 5. Part 1: Baseline Configuration (Before)
 
-## 4. Part 2: Secure Configuration (The "Protected" Setup)
-
-### Step 4.1: Configure AMF for AES Encryption
-
-Open `config/amfcfg.yaml`. Change `cipheringOrder` to prioritize `NEA2` (AES-128).
-
-```yaml
-    cipheringOrder:
-      - NEA2  # <-- Priority 1: AES 128-bit Encryption
-      - NEA0
-```
-
-### Step 4.2: Configure UE for SUCI (Identity Protection)
-
-Open `config/uecfg.yaml`. Enable Profile A using the Public Key from `udmcfg.yaml`.
-
-```yaml
-# SUCI Protection Scheme
-protectionScheme: 1 # Profile A
-# Home Network Public Key ID (matching UDM)
-homeNetworkPublicKeyId: 1
-# Home Network Public Key (Profile A from UDM)
-homeNetworkPublicKey: "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"
-```
-
-### Step 4.3: Run & Capture Evidence
-
-Repeat the execution steps from Part 1, but save the file as `secure.pcap`.
+### Step 5.1: Back up the secure config
 
 ```bash
+cd /opt/free5gc-compose
+cp config/amfcfg.yaml /tmp/amfcfg.day2.bak
+cp config/uecfg.yaml /tmp/uecfg.day2.bak
+```
+
+### Step 5.2: Configure AMF for null encryption
+
+```bash
+cd /opt/free5gc-compose
+python3 - <<'PY'
+from pathlib import Path
+p = Path('config/amfcfg.yaml')
+s = p.read_text()
+s = s.replace(
+    "    cipheringOrder: # the priority of ciphering algorithms\n      - NEA2\n      - NEA0",
+    "    cipheringOrder: # the priority of ciphering algorithms\n      - NEA0\n      - NEA2",
+)
+p.write_text(s)
+PY
+```
+
+### Step 5.3: Disable SUCI protection in the UE config
+
+```bash
+cd /opt/free5gc-compose
+python3 - <<'PY'
+from pathlib import Path
+p = Path('config/uecfg.yaml')
+s = p.read_text()
+s = s.replace('\nprotectionScheme: 1\n', '\n# protectionScheme: 1\n')
+s = s.replace('\nhomeNetworkPublicKeyId: 1\n', '\n# homeNetworkPublicKeyId: 1\n')
+s = s.replace(
+    '\nhomeNetworkPublicKey: "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"\n',
+    '\n# homeNetworkPublicKey: "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"\n',
+)
+p.write_text(s)
+PY
+```
+
+### Step 5.4: Run and capture the baseline proof
+
+```bash
+cd /opt/free5gc-compose
 docker restart amf ueransim
-docker exec ueransim tcpdump -i any -w /ueransim/secure.pcap &
-docker exec ueransim ./nr-ue -c ./config/uecfg.yaml
-# ... (wait 10s) ...
-docker exec ueransim pkill tcpdump
-docker cp ueransim:/ueransim/secure.pcap captures/secure.pcap
+sleep 8
+echo free5gc | sudo -S bash -lc 'rm -f /tmp/day2_baseline_n2.pcap /tmp/day2_baseline_n2.pid /tmp/day2_baseline_n2.log; nohup tcpdump -i br-free5gc -w /tmp/day2_baseline_n2.pcap host 10.100.200.12 and host 10.100.200.16 >/tmp/day2_baseline_n2.log 2>&1 & echo $! >/tmp/day2_baseline_n2.pid'
+docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue_baseline.log 2>&1 &'
+sleep 20
+echo free5gc | sudo -S bash -lc 'kill $(cat /tmp/day2_baseline_n2.pid)'
 ```
 
-### Step 4.4: Verification (The "Shield")
+### Step 5.5: Verify the baseline proof
 
-**Evidence 1: Concealed Identity (SUCI)**
-
-* **Log**: Check AMF/UE logs. You will see `MobileIdentity5GS: SUCI[...]`.
-* **Wireshark**: Open `secure.pcap`. Filter: `nas_5gs.mm.suci.scheme_id`.
-  * **Observation**: Value is `1` (ECIES Profile A).
-  * **Result**: The IMSI is hidden. You only see a random `Scheme output` blob.
-
-**Evidence 2: Hidden Data (No "internet")**
-
-* **Command Line Test**: Run `strings captures/secure.pcap | grep "internet"`.
-* **Result**: **NO OUTPUT**. The text "internet" has been encrypted into random bytes.
-
----
-
-## 5. Reference: What Success Looks Like
-
-### A. Wireshark Packet Detail: Registration Request
-
-**Baseline (Insecure)**
-
-```text
-5GS mobile identity
-    .000 .... = SUPI format: IMSI (0)
-    .... .000 = Protection scheme Id: NULL scheme (0)  <-- VULNERABLE
-    Mobile Country Code (MCC): 208
-    Identity: 0000000001 (Cleartext)
+```bash
+docker exec ueransim tail -n 40 /tmp/ue_baseline.log
+docker compose logs --since 3m free5gc-amf | grep -E 'SUCI|Registration|Authentication|Security Mode|MobileIdentity5GS'
+strings /tmp/day2_baseline_n2.pcap | grep internet
 ```
 
-**Secure (Protected)**
+Expected baseline proof:
 
-```text
-5GS mobile identity
-    .... .001 = Type of identity: SUCI (1)             <-- SECURE
-    .... 0001 = Protection scheme Id: ECIES scheme profile A (1)
-    Scheme output: a02b905a... (Encrypted Ciphertext)
+- UE log contains `Selected integrity[2] ciphering[0]`
+- AMF log contains `MobileIdentity5GS: SUCI[suci-0-208-93-0000-0-0-0000000001]`
+- `strings /tmp/day2_baseline_n2.pcap | grep internet` prints `internet`
+
+## 6. Part 2: Secure Configuration (After)
+
+### Step 6.1: Restore the original secure config
+
+```bash
+cd /opt/free5gc-compose
+cp /tmp/amfcfg.day2.bak config/amfcfg.yaml
+cp /tmp/uecfg.day2.bak config/uecfg.yaml
 ```
 
-### B. Wireshark Packet Detail: Security Mode Command
+### Step 6.2: Run and capture the secure proof
 
-**Baseline (Insecure)**
-
-```text
-NAS security algorithms
-    Type of ciphering algorithm: 5G-EA0 (null) (0)     <-- NO ENCRYPTION
+```bash
+cd /opt/free5gc-compose
+docker restart amf ueransim
+sleep 8
+echo free5gc | sudo -S bash -lc 'rm -f /tmp/day2_secure_n2.pcap /tmp/day2_secure_n2.pid /tmp/day2_secure_n2.log; nohup tcpdump -i br-free5gc -w /tmp/day2_secure_n2.pcap host 10.100.200.12 and host 10.100.200.16 >/tmp/day2_secure_n2.log 2>&1 & echo $! >/tmp/day2_secure_n2.pid'
+docker exec -d ueransim bash -lc 'cd /ueransim && nohup ./nr-ue -c ./config/uecfg.yaml >/tmp/ue_secure.log 2>&1 &'
+sleep 20
+echo free5gc | sudo -S bash -lc 'kill $(cat /tmp/day2_secure_n2.pid)'
 ```
 
-**Secure (Protected)**
+### Step 6.3: Verify the secure proof
 
-```text
-NAS security algorithms
-
-### C. Actual AMF Log Evidence (Traceability)
-
-**Baseline (Insecure) Log:**
-> From `amf_baseline.log`. Note the Cleartext SUPI.
-```text
-[INFO][AMF][Gmm] ... RegistrationType: Initial Registration
-[INFO][AMF][Gmm] ... MobileIdentity5GS: SUCI[suci-0-208-93-0000-0-0-0000000001]
-                                          ^-- Scheme 0 (Null)      ^-- Identity (Cleartext)
+```bash
+docker exec ueransim tail -n 40 /tmp/ue_secure.log
+docker compose logs --since 3m free5gc-amf | grep -E 'SUCI|Registration|Authentication|Security Mode|MobileIdentity5GS'
+strings /tmp/day2_secure_n2.pcap | grep internet
 ```
 
-**Secure (Protected) Log:**
-> From `amf_secure.log`. Note the Encrypted SUCI.
+Expected secure proof:
 
-```text
-[INFO][AMF][Gmm] ... RegistrationType: Initial Registration
-[INFO][AMF][Gmm] ... MobileIdentity5GS: SUCI[suci-0-208-93-0000-1-0-1abad1c69619...]
-                                          ^-- Scheme 1 (Profile A) ^-- Identity (Encrypted Blob)
+- UE log contains `Selected integrity[2] ciphering[2]`
+- AMF log contains `MobileIdentity5GS: SUCI[suci-0-208-93-0000-1-1-...]`
+- `strings /tmp/day2_secure_n2.pcap | grep internet` prints no output
+
+## 7. Final Before/After Check
+
+Run these together to show the comparison cleanly:
+
+```bash
+docker exec ueransim grep -E 'Selected integrity|Initial Registration is successful|PDU Session establishment is successful' /tmp/ue_baseline.log /tmp/ue_secure.log
+strings /tmp/day2_baseline_n2.pcap | grep internet
+strings /tmp/day2_secure_n2.pcap | grep internet
+ls -lh /tmp/day2_baseline_n2.pcap /tmp/day2_secure_n2.pcap
+```
+
+Students should be able to explain:
+
+1. Why `ciphering[0]` means the baseline is weak
+2. Why `ciphering[2]` means the secure run is protected
+3. Why scheme `0` reveals the clear subscriber identity form
+4. Why scheme `1` conceals the identity using SUCI Profile A
+5. Why the DNN string is visible before but not after
+
+## 8. Success Criteria
+
+The lab is successful when all of these are true:
+
+- baseline run completed registration and PDU setup
+- secure run completed registration and PDU setup
+- baseline run showed `ciphering[0]`
+- secure run showed `ciphering[2]`
+- baseline capture printed `internet`
+- secure capture printed nothing for `grep internet`
+
+## 9. Cleanup
+
+After the comparison, keep the secure config in place:
+
+```bash
+cd /opt/free5gc-compose
+cp /tmp/amfcfg.day2.bak config/amfcfg.yaml
+cp /tmp/uecfg.day2.bak config/uecfg.yaml
+docker restart amf ueransim
+sleep 8
+self-test.sh
 ```
