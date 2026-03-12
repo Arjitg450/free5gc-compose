@@ -1,6 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "${SCRIPT_DIR}/../script/rollback-to-normal.sh" "$@"
+. "${SCRIPT_DIR}/lib/free5gc-mode.sh"
+
+stop_attack_mode

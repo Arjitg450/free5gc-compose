@@ -1,3 +1,5 @@
+name: free5gc-attack
+
 # ============================================================================
 # docker-compose-attack.yaml
 # Compromised SMF Attack PoC — Uplink N3 Tunnel Swap
@@ -5,13 +7,12 @@
 # Topology:
 #   1 AMF, 1 Compromised SMF, 2 UPFs (UPF1, UPF2), 1 gNB, 2 UEs
 #
-# Usage (run from free5gc-compose repo root with --project-directory .):
+# Usage (run from free5gc-compose repo root):
 #   ./attack_poc/build_compromised_smf.sh
-#   docker compose -f attack_poc/docker-compose-attack.yaml --project-directory . up -d
+#   ./script/attack-up.sh
 #
 #   To return to normal:
-#   docker compose -f attack_poc/docker-compose-attack.yaml --project-directory . down
-#   docker compose up -d
+#   ./script/rollback-to-normal.sh
 # ============================================================================
 
 services:
@@ -332,6 +333,7 @@ services:
 
 networks:
   privnet:
+    name: free5gc-lab-net
     ipam:
       driver: default
       config:
@@ -341,3 +343,4 @@ networks:
 
 volumes:
   dbdata:
+    name: attack_poc_dbdata

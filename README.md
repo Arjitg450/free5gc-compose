@@ -1,171 +1,280 @@
 # free5GC compose
 
-This repository is a docker compose version of [free5GC](https://github.com/free5gc/free5gc) for stage 3. It's inspired by [free5gc-docker-compose](https://github.com/calee0219/free5gc-docker-compose) and also reference to [docker-free5gc](https://github.com/abousselmi/docker-free5gc).
+This repository is a Docker Compose deployment of [free5GC](https://github.com/free5gc/free5gc) for stage 3. It is inspired by [free5gc-docker-compose](https://github.com/calee0219/free5gc-docker-compose) and [docker-free5gc](https://github.com/abousselmi/docker-free5gc).
 
-You can setup your own config in [config](./config) folder and [docker-compose.yaml](docker-compose.yaml)
+The repo now has two supported lab modes:
+
+- Normal mode: the stock single-UPF stack from [docker-compose.yaml](./docker-compose.yaml)
+- Attack PoC mode: the compromised-SMF topology from [attack_poc/docker-compose-attack.yaml](./attack_poc/docker-compose-attack.yaml)
+
+Both modes intentionally use the same `10.100.200.0/24` lab subnet and bridge, so they are treated as mutually exclusive lab states. Use the wrapper scripts in `script/` or the matching `make` targets to switch modes safely.
 
 ## Prerequisites
 
-- [GTP5G kernel module](https://github.com/free5gc/gtp5g): needed to run the UPF (Currently, UPF only supports GTP5G versions 0.9.5 (use git clone --branch v0.9.5 --depth 1 https://github.com/free5gc/gtp5g.git).)
-- [Docker Engine](https://docs.docker.com/engine/install): needed to run the Free5GC containers
-- [Docker Compose v2](https://docs.docker.com/compose/install): needed to bootstrap the free5GC stack
+- [GTP5G kernel module](https://github.com/free5gc/gtp5g): needed to run the UPF. UPF currently supports GTP5G `v0.9.5`.
+- [Docker Engine](https://docs.docker.com/engine/install): needed to run the free5GC containers.
+- [Docker Compose v2](https://docs.docker.com/compose/install): required because the repo uses `docker compose`.
+- `bash`, `ip`, and `dhclient` inside the lab VM if you want to use the NIC recovery helper.
 
-**Note: AVX for MongoDB**: some HW does not support MongoDB releases above`4.4` due to use of the new AVX instructions set. To verify if your CPU is compatible you can check CPU flags by running `grep avx /proc/cpuinfo`. A workaround is suggested [here](https://github.com/free5gc/free5gc-compose/issues/30#issuecomment-897627049).
+Note: some CPUs do not support MongoDB releases above `4.4` because of AVX requirements. Check with `grep avx /proc/cpuinfo`. A workaround is discussed [here](https://github.com/free5gc/free5gc-compose/issues/30#issuecomment-897627049).
 
-## Start free5gc
+## Lab Workflows
 
-Because we need to create tunnel interface, we need to use privileged container with root permission.
+### Mode commands
 
-### Pull docker images from Docker Hub
+Use either the scripts or the `make` targets:
+
+```bash
+./script/normal-up.sh
+./script/normal-down.sh
+./script/attack-up.sh
+./script/attack-down.sh
+./script/rollback-to-normal.sh
+./script/fix-enp0s3.sh
+./script/fix-vdi-network.sh
+```
+
+```bash
+make normal-up
+make normal-down
+make attack-up
+make attack-down
+make rollback-normal
+make fix-enp0s3
+make fix-vdi-network
+```
+
+The wrappers do four things before startup:
+
+1. Check that Docker and `docker compose` are available.
+2. Warn if `enp0s3` is missing, down, or lacks IPv4.
+3. Inspect Docker networks that already claim `10.100.200.0/24`.
+4. Automatically bring down only this repo's known conflicting projects (`free5gc-normal`, `free5gc-attack`, `free5gc-compose`, `attack_poc`) and remove only this repo's orphaned networks.
+
+If the overlap belongs to an unrelated Docker network on the host, the scripts stop and print the exact inspection commands instead of deleting anything.
+
+### Normal mode
+
+```bash
+./script/normal-up.sh
+```
+
+This starts the stock root compose stack with deterministic project/network naming:
+
+- Compose project: `free5gc-normal`
+- Shared lab network: `free5gc-lab-net`
+- Root MongoDB volume: `free5gc-compose_dbdata`
+
+Useful verification commands:
+
+```bash
+docker compose --project-name free5gc-normal --project-directory . -f docker-compose.yaml ps
+docker network inspect free5gc-lab-net
+docker logs amf --tail 20
+docker logs smf --tail 20
+```
+
+To stop normal mode:
+
+```bash
+./script/normal-down.sh
+```
+
+### Attack PoC mode
+
+Build the compromised SMF image once if it is not already present:
+
+```bash
+./attack_poc/build_compromised_smf.sh
+```
+
+Then switch into attack mode:
+
+```bash
+./script/attack-up.sh
+```
+
+This wrapper safely brings down normal mode first if it owns the conflicting subnet, then starts the attack topology with:
+
+- Compose project: `free5gc-attack`
+- Shared lab network: `free5gc-lab-net`
+- Attack MongoDB volume: `attack_poc_dbdata`
+
+Useful verification commands:
+
+```bash
+docker compose --project-name free5gc-attack --project-directory . -f attack_poc/docker-compose-attack.yaml ps
+docker logs smf --tail 40 | grep -i ATTACK
+docker logs ueransim-gnb --tail 20
+docker logs ueransim-ue1 --tail 20
+docker logs ueransim-ue2 --tail 20
+```
+
+To stop attack mode:
+
+```bash
+./script/attack-down.sh
+```
+
+### Switching Between Modes Safely
+
+Do not run the root stack and the attack PoC stack side by side. They reuse container names, the same lab bridge, and the same lab subnet.
+
+Use these transitions instead:
+
+```bash
+# normal -> attack
+./script/attack-up.sh
+
+# attack -> normal
+./script/rollback-to-normal.sh
+```
+
+You no longer need to remember whether the old conflicting project was `free5gc-compose` or `attack_poc`; the wrappers check and clean both of those legacy project names automatically when they belong to this repo.
+
+### Single-command attack tutorial
+
+If you want the attack lab walkthrough as a separate markdown file for the current VM or VDI workspace, use [attack_poc/SINGLE_COMMAND_ATTACK_TUTORIAL.md](./attack_poc/SINGLE_COMMAND_ATTACK_TUTORIAL.md). It documents the existing one-command attack entrypoint:
+
+```bash
+./attack_poc/run_attack.sh
+```
+
+### VDI command-only tutorial
+
+If you only want the exact command list to run in the VDI, use [attack_poc/VDI_ATTACK_COMMANDS.md](./attack_poc/VDI_ATTACK_COMMANDS.md).
+
+### How To Inspect Conflicting Docker Networks
+
+Use these commands before manual cleanup or when a wrapper reports an unrelated overlap:
+
+```bash
+docker network ls
+docker network inspect free5gc-lab-net
+docker network inspect free5gc-compose_privnet
+docker network inspect attack_poc_privnet
+docker ps -a --filter network=free5gc-lab-net
+docker ps -a --filter network=free5gc-compose_privnet
+docker ps -a --filter network=attack_poc_privnet
+```
+
+If the overlap belongs to something outside this repo, inspect that network first and remove it yourself only if you know it is safe.
+
+### Fix `enp0s3` If VM Networking Is Down
+
+If the VM loses its management IP or SSH access because `enp0s3` is down, run:
+
+```bash
+sudo ./script/fix-enp0s3.sh
+```
+
+The helper will:
+
+1. Check that `enp0s3` exists.
+2. Bring it up if it is down.
+3. Run `dhclient -v enp0s3` if no IPv4 address is present.
+4. Print the final state with `ip -4 -br a show enp0s3`.
+
+If your VM uses another NIC name, pass it explicitly:
+
+```bash
+sudo ./script/fix-vdi-network.sh eth0
+```
+
+## Pull Or Build Images
+
+### Pull images from Docker Hub
 
 ```bash
 docker compose pull
 ```
 
-### [Optional] Build docker images from local sources
+### Optional: build images from local sources
 
 ```bash
-# Clone the project
 git clone https://github.com/free5gc/free5gc-compose.git
 cd free5gc-compose
 
-# clone free5gc sources
 cd base
-git clone --recursive -j `nproc` https://github.com/free5gc/free5gc.git
+git clone --recursive -j "$(nproc)" https://github.com/free5gc/free5gc.git
 cd ..
 
-# Build the images
 make all
 docker compose -f docker-compose-build.yaml build
 
-# Alternatively you can build specific NF image e.g.:
-make amf
+# Example: build a single NF image
 docker compose -f docker-compose-build.yaml build free5gc-amf
 ```
 
-Note:
-
-Dangling images may be created during the build process. It is advised to remove them from time to time to free up disk space.
+Dangling images may be created during local builds. Remove them periodically if needed:
 
 ```bash
 docker rmi $(docker images -f "dangling=true" -q)
 ```
 
-### Run free5GC
+## Manual Compose Usage
 
-You can create free5GC containers based on local images or docker hub images:
-
-```bash
-# use local images
-docker compose -f docker-compose-build.yaml up
-# use images from docker hub
-docker compose up # add -d to run in background mode
-```
-
-Destroy the established container resource after testing:
+The wrapper scripts are the recommended entrypoint for the lab because they handle mode switching and subnet preflight. If you need direct Compose commands, use the deterministic project names shown below:
 
 ```bash
-# Remove established containers (local images)
-docker compose -f docker-compose-build.yaml rm
-# Remove established containers (remote images)
-docker compose rm
+# stock stack
+docker compose --project-name free5gc-normal --project-directory . -f docker-compose.yaml up -d
+
+# attack stack
+docker compose --project-name free5gc-attack --project-directory . -f attack_poc/docker-compose-attack.yaml up -d
 ```
 
 ## Troubleshooting
 
-Please refer to the [Troubleshooting](./TROUBLESHOOTING.md) for more troubleshooting information.
+See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for the Docker network overlap workflow, `enp0s3` recovery, MongoDB recovery, and log inspection commands.
 
-## Integration with (external) gNB/UE
+## Integration with External gNB or UE
 
 ### UERANSIM Notes
 
-The integration with the [UERANSIM](https://github.com/aligungr/UERANSIM) eNB/UE simulator is documented [here](https://free5gc.org/guide/5-install-ueransim/).
+The integration with [UERANSIM](https://github.com/aligungr/UERANSIM) is documented [here](https://free5gc.org/guide/5-install-ueransim/). This [issue](https://github.com/free5gc/free5gc-compose/issues/28) also has useful notes.
 
-This [issue](https://github.com/free5gc/free5gc-compose/issues/28) provides detailed steps that might be useful.
+#### Option 1: Run UE inside the gNB container
 
-#### Option 1: Run UE inside gNB container
-
-You can launch a UE using:
-
-```console
+```bash
 docker exec -it ueransim bash
-root@host:/ueransim# ./nr-ue -c config/uecfg.yaml
+./nr-ue -c config/uecfg.yaml
 ```
 
-#### Option 2: Run UE on a separate container
+#### Option 2: Run UE in a separate container
 
-By default, the provided UERANSIM service on this `docker-compose.yaml` will only act as a gNB. If you want to create a UE you'll need to:
+By default, the `ueransim` service in [docker-compose.yaml](./docker-compose.yaml) acts only as a gNB. To add a UE service:
 
-1. Create a subscriber through the WebUI. Follow the steps [here](https://free5gc.org/guide/Webconsole/Create-Subscriber-via-webconsole/#4-open-webconsole)
-1. Copy the `UE ID` field
-1. Change the value of `supi` in `config/uecfg.yaml` to the UE ID that you just copied
-1. Change the `linkIp` in `config/gnbcfg.yaml` to `gnb.free5gc.org` (which is also present in the `gnbSearchList` in `config/uecfg.yaml`) to enable communication between the UE and gNB services
-1. Add an UE service on `docker-compose.yaml` as it follows:
+1. Create a subscriber through the WebUI.
+2. Copy the `UE ID` field.
+3. Set `supi` in [config/uecfg.yaml](./config/uecfg.yaml) to that UE ID.
+4. Set `linkIp` in [config/gnbcfg.yaml](./config/gnbcfg.yaml) to `gnb.free5gc.org`.
+5. Add a UE service to [docker-compose.yaml](./docker-compose.yaml) using `privnet`.
+6. Start normal mode with `./script/normal-up.sh`.
 
-```yaml
-ue:
-  container_name: ue
-  image: free5gc/ueransim:latest
-  command: ./nr-ue -c ./config/uecfg.yaml
-  volumes:
-    - ./config/uecfg.yaml:/ueransim/config/uecfg.yaml
-  cap_add:
-    - NET_ADMIN
-  devices:
-    - "/dev/net/tun"
-  networks:
-    privnet:
-      aliases:
-        - ue.free5gc.org
-  depends_on:
-    - ueransim
-```
+## Integration of WebUI with Nginx Reverse Proxy
 
-5. Run `docker-compose.yaml`
-
-### srsRAN Notes
-
-You can check this [issue](https://github.com/free5gc/free5gc-compose/issues/94) for some sample configuration files of srsRAN + free5GC
-
-## Integration of WebUI with Nginx reverse proxy
-
-Here you can find helpful guidelines on the integration of Nginx reverse proxy to set it in front of the WebUI: https://github.com/free5gc/free5gc-compose/issues/55#issuecomment-1146648600
+Guidance for putting Nginx in front of the WebUI is available [here](https://github.com/free5gc/free5gc-compose/issues/55#issuecomment-1146648600).
 
 ## ULCL Configuration
 
-To start the core with a I-UPF and PSA-UPF ULCL configuration, use
+To start the core with an I-UPF and PSA-UPF ULCL configuration:
 
 ```bash
 docker compose -f docker-compose-ulcl.yaml up
 ```
 
-> Note: This configuration have been tested using release [free5gc-compose v4.0.0](https://github.com/free5gc/free5gc-compose/tree/v4.0.0)
+This configuration was tested with [free5gc-compose v4.0.0](https://github.com/free5gc/free5gc-compose/tree/v4.0.0). See [config/ULCL](./config/ULCL).
 
-Check out the used configuration files at `config/ULCL`.
+## Prometheus and Grafana
 
-## Prometheous & Grafana
-
-To start the core with Prometheous and Grafana, we need external compose service file to start with our core compose:
+To start the core with Prometheus and Grafana:
 
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose-prometheus.yaml up
 ```
 
-Please make sure the metrics secions are enabled in NFs' config, it is disabled in default:
-
-```yaml
-  # Metrics configuration
-  # If using the same bindingIPv4 as the sbi server, make sure that the ports are different
-  metrics:
-=>  enable: true # (Optional, default false)
-    scheme: http # (Required) the protocol for metrics (http or https, default https)
-    bindingIPv4: amf.free5gc.org # (Required) IP used to bind the metrics endpoint (default 0.0.0.0)
-    port: 9091 # (Optional, default 9091) port used to bind the service
-    tls: # (Optional) the local path of TLS key (Could be the same as the sbi ones)
-      pem: cert/amf.pem # AMF TLS Certificate
-      key: cert/amf.key # AMF TLS Private key
-    namespace: free5gc # (Optional, default free5gc)
-```
+Make sure metrics are enabled in the NF configuration first.
 
 ## Reference
 

@@ -1,58 +1,147 @@
 # Troubleshooting
 
-### Drop data from DB
-Sometimes, you need to drop data from DB:
+## Docker network overlap on `10.100.200.0/24`
+
+The stock stack and the attack PoC both use the same lab subnet, `10.100.200.0/24`, on the bridge `br-free5gc`. Use the repo wrappers instead of raw `docker compose up` when switching modes:
+
+```bash
+./script/normal-up.sh
+./script/attack-up.sh
+./script/rollback-to-normal.sh
+```
+
+Those wrappers will:
+
+- inspect Docker networks already using `10.100.200.0/24`
+- stop only this repo's known conflicting projects
+- remove only this repo's orphaned networks
+- refuse to delete unrelated Docker networks on the host
+
+### Inspect conflicting networks manually
+
+```bash
+docker network ls
+docker network inspect free5gc-lab-net
+docker network inspect free5gc-compose_privnet
+docker network inspect attack_poc_privnet
+docker ps -a --filter network=free5gc-lab-net
+docker ps -a --filter network=free5gc-compose_privnet
+docker ps -a --filter network=attack_poc_privnet
+```
+
+If the overlap belongs to an unrelated network, remove it manually only after confirming it is safe.
+
+## Safe mode switching
+
+### Start normal mode
+
+```bash
+./script/normal-up.sh
+```
+
+### Stop normal mode
+
+```bash
+./script/normal-down.sh
+```
+
+### Start attack mode
+
+```bash
+./attack_poc/build_compromised_smf.sh
+./script/attack-up.sh
+```
+
+### Stop attack mode
+
+```bash
+./script/attack-down.sh
+```
+
+### Roll back from attack mode to normal mode
+
+```bash
+./script/rollback-to-normal.sh
+```
+
+## Fix `enp0s3` when the VM loses networking
+
+If the VM NIC is down or has no IPv4 address, use:
+
+```bash
+sudo ./script/fix-enp0s3.sh
+```
+
+If the VDI also fails with `Could not resolve host` while running `branch-switch.sh`, use:
+
+```bash
+sudo ./script/fix-vdi-network.sh
+```
+
+`fix-vdi-network.sh` restores the NIC, refreshes DHCP, checks the default route, repairs DNS, and verifies name resolution before you retry the branch switch.
+
+If your NIC uses another name, pass it explicitly:
+
+```bash
+sudo ./script/fix-vdi-network.sh eth0
+```
+
+## Verify stack health
+
+### Normal mode
+
+```bash
+docker compose --project-name free5gc-normal --project-directory . -f docker-compose.yaml ps
+docker logs amf --tail 20
+docker logs smf --tail 20
+docker network inspect free5gc-lab-net
+```
+
+### Attack mode
+
+```bash
+docker compose --project-name free5gc-attack --project-directory . -f attack_poc/docker-compose-attack.yaml ps
+docker logs smf --tail 40 | grep -i ATTACK
+docker logs ueransim-gnb --tail 20
+docker logs ueransim-ue1 --tail 20
+docker logs ueransim-ue2 --tail 20
+```
+
+## Drop data from MongoDB
+
+Sometimes you need to drop the database:
 
 ```bash
 docker exec -it mongodb mongosh
-> use free5gc
-> db.dropDatabase()
-> exit # (Or Ctrl-D)
+use free5gc
+db.dropDatabase()
+exit
 ```
 
-### How to inspect logs?
-You can see logs for each service using `docker logs` command. For example, to access the logs of the _SMF_ you can use:
+## Inspect service logs
 
-```console
+Use `docker logs` for individual services. Example:
+
+```bash
 docker logs smf
 ```
 
-### MongoDB Error Resolve
+## MongoDB WiredTiger recovery
 
-If you encounter an issue where MongoDB's Docker cannot start and the following error message is generated.
+If MongoDB fails with WiredTiger corruption errors, recreate the volume for the affected mode.
 
-Error Message on NRF
+### Root stack volume
 
 ```bash
-2024-10-14T05:19:50.163862777Z [ERRO][NRF][NFM] SetLocationHeader err: RestfulAPIGetOne err: server selection error: server selection timeout, current topology: { Type: Unknown, Servers: [{ Addr: db:27017, Type: Unknown, Last error: connection() error occured during connection handshake: dial tcp: lookup db on 127.0.0.11:53: server misbehaving }, ] }
+./script/normal-down.sh
+docker volume rm free5gc-compose_dbdata
+./script/normal-up.sh
 ```
 
-Error Message on Mongodb
+### Attack stack volume
+
 ```bash
-2024-10-14T05:19:17.053+0000 I STORAGE  [initandlisten] wiredtiger_open config: create,cache_size=473M,session_max=20000,eviction=(threads_min=4,threads_max=4),config_base=false,statistics=(fast),cache_cursors=false,compatibility=(release="3.0",require_max="3.0"),log=(enabled=true,archive=true,path=journal,compressor=snappy),file_manager=(close_idle_time=100000),statistics_log=(wait=0),verbose=(recovery_progress),
-2024-10-14T05:19:17.752+0000 E STORAGE  [initandlisten] WiredTiger error (-31802) [1728883157:752740][1:0x7f1099fa5580], file:WiredTiger.wt, connection: unable to read root page from file:WiredTiger.wt: WT_ERROR: non-specific WiredTiger error
-2024-10-14T05:19:17.752+0000 E STORAGE  [initandlisten] WiredTiger error (0) [1728883157:752839][1:0x7f1099fa5580], file:WiredTiger.wt, connection: WiredTiger has failed to open its metadata
-2024-10-14T05:19:17.752+0000 E STORAGE  [initandlisten] WiredTiger error (0) [1728883157:752847][1:0x7f1099fa5580], file:WiredTiger.wt, connection: This may be due to the database files being encrypted, being from an older version or due to corruption on disk
-2024-10-14T05:19:17.752+0000 E STORAGE  [initandlisten] WiredTiger error (0) [1728883157:752851][1:0x7f1099fa5580], file:WiredTiger.wt, connection: You should confirm that you have opened the database with the correct options including all encryption and compression options
-2024-10-14T05:19:17.754+0000 E -        [initandlisten] Assertion: 28595:-31802: WT_ERROR: non-specific WiredTiger error src/mongo/db/storage/wiredtiger/wiredtiger_kv_engine.cpp 421
-2024-10-14T05:19:17.770+0000 I STORAGE  [initandlisten] exception in initAndListen: Location28595: -31802: WT_ERROR: non-specific WiredTiger error, terminating
-2024-10-14T05:19:17.771+0000 I NETWORK  [initandlisten] shutdown: going to close listening sockets...
-2024-10-14T05:19:17.771+0000 I NETWORK  [initandlisten] removing socket file: /tmp/mongodb-27017.sock
-2024-10-14T05:19:17.771+0000 I CONTROL  [initandlisten] now exiting
-2024-10-14T05:19:17.771+0000 I CONTROL  [initandlisten] shutting down with code:100
-```
-
-#### Here is the solution.
-```bash
-# Remove the container first.
-$ sudo docker compose rm
-
-# List the free5GC database volumes, you should find free5gc-compose_dbdata.
-$ sudo docker volume ls | grep dbdata
-
-# Remove the old DB volume using following command.
-$ sudo docker volume rm fre5gc-compose_dbdata
-
-# And then, you can build docker container again.
-$ sudo docker compose up
+./script/attack-down.sh
+docker volume rm attack_poc_dbdata
+./script/attack-up.sh
 ```

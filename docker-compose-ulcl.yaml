@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   free5gc-i-upf:
     container_name: i-upf

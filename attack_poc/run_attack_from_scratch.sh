@@ -16,7 +16,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 PCAP_FILE="${CAPTURE_DIR}/attack_proof_${TIMESTAMP}.pcap"
 PROOF_REPORT="${CAPTURE_DIR}/attack_proof_report_${TIMESTAMP}.txt"
 
-COMPOSE_CMD="docker compose -f attack_poc/docker-compose-attack.yaml --project-name attack_poc --project-directory ."
+COMPOSE_CMD="docker compose -f attack_poc/docker-compose-attack.yaml --project-name free5gc-attack --project-directory ."
 WEBUI_URL="http://localhost:5050"
 
 echo "=============================================="
@@ -25,12 +25,13 @@ echo "=============================================="
 
 # ─── 1. Tear down + wipe DB volume ──────────────────────────────────────────
 echo "[1/8] Tearing down existing stack and wiping DB volume..."
+./script/attack-down.sh
 ${COMPOSE_CMD} down --volumes --remove-orphans 2>/dev/null || true
 sleep 3
 
 # ─── 2. Bring up the full stack ─────────────────────────────────────────────
 echo "[2/8] Bringing up attack stack..."
-${COMPOSE_CMD} up -d
+./script/attack-up.sh
 echo "    Waiting 20s for NFs to initialize..."
 sleep 20
 

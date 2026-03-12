@@ -15,8 +15,7 @@
 #   ./build_compromised_smf.sh
 #
 # To return to normal:
-#   docker-compose -f docker-compose-attack.yaml down
-#   docker-compose up -d   # uses original images
+#   ./script/rollback-to-normal.sh
 # ============================================================================
 
 set -euo pipefail
@@ -192,5 +191,5 @@ echo "============================================"
 echo ""
 echo "Next steps:"
 echo "  cd ${SCRIPT_DIR}/.."
-echo "  docker-compose -f attack_poc/docker-compose-attack.yaml up -d"
+echo "  ./script/attack-up.sh"
 echo ""

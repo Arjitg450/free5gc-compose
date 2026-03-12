@@ -5,8 +5,8 @@
 #
 # This script runs the complete attack from start to finish:
 #   1. Builds the compromised SMF Docker image
-#   2. Tears down any existing deployment
-#   3. Launches the attack topology (2 UPFs, 2 UEs)
+#   2. Safely switches the lab into attack mode
+#   3. Confirms the attack topology is up
 #   4. Provisions subscribers
 #   5. Waits for PDU sessions
 #   6. Runs verification
@@ -33,15 +33,14 @@ echo "━━━ Step 1/6: Building compromised SMF image ━━━"
 ./attack_poc/build_compromised_smf.sh
 echo ""
 
-# ─── Step 2: Tear down ───
-echo "━━━ Step 2/6: Tearing down existing deployment ━━━"
-docker-compose down -v 2>/dev/null || true
-docker-compose -f attack_poc/docker-compose-attack.yaml down -v 2>/dev/null || true
+# ─── Step 2: Switch modes ───
+echo "━━━ Step 2/6: Switching lab into attack mode ━━━"
+./script/attack-up.sh
 echo ""
 
-# ─── Step 3: Launch ───
-echo "━━━ Step 3/6: Launching attack topology ━━━"
-docker-compose -f attack_poc/docker-compose-attack.yaml up -d
+# ─── Step 3: Confirm stack ───
+echo "━━━ Step 3/6: Confirming attack topology ━━━"
+docker compose -f attack_poc/docker-compose-attack.yaml --project-name free5gc-attack --project-directory . ps
 echo ""
 
 # ─── Step 4: Provision ───
@@ -78,5 +77,5 @@ echo ""
 echo "╔══════════════════════════════════════════════════╗"
 echo "║  Attack demo complete!                           ║"
 echo "║                                                  ║"
-echo "║  To roll back: ./attack_poc/rollback.sh          ║"
+echo "║  To roll back: ./script/rollback-to-normal.sh    ║"
 echo "╚══════════════════════════════════════════════════╝"

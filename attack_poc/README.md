@@ -2,10 +2,11 @@
 
 ## Overview
 
-This PoC demonstrates a **Compromised SMF** vulnerability in a 5G Core Network where
-the SMF intentionally swaps the **Uplink N3 Tunnel Information** (GTP-U TEID + UPF IP)
-between two PDU sessions served by different UPFs. As a result:
+This PoC demonstrates a **Compromised SMF** vulnerability in a 5G Core Network where the SMF intentionally swaps the **Uplink N3 Tunnel Information** (GTP-U TEID + UPF IP) between two PDU sessions served by different UPFs.
 
+This topology replaces the normal lab stack during a run, so use `./script/attack-up.sh`, `./script/attack-down.sh`, and `./script/rollback-to-normal.sh` instead of manually juggling project names or deleting Docker networks.
+
+As a result:
 - **UE1's uplink traffic** is routed to **UPF2** (instead of UPF1)
 - **UE2's uplink traffic** is routed to **UPF1** (instead of UPF2)
 
@@ -76,8 +77,11 @@ After Attack:    UE1→UPF2    UE2→UPF1    ← SWAPPED!
 | `config/gnbcfg.yaml` | gNB config (supports both S-NSSAIs) |
 | `config/uerouting-attack.yaml` | Minimal UE routing (no ULCL) |
 | `provision_subscribers.sh` | Provisions UE1 + UE2 in MongoDB |
+| `run_attack.sh` | Existing one-command attack workflow that builds, switches modes, provisions, and verifies |
 | `run_attack_from_scratch.sh` | One-shot: tear down, bring up, provision, UE1→UE2, capture N3 pcap, proof report (run with `sudo` for pcap) |
 | `run_attack_with_pcap.sh` | Wrapper that runs `sudo ./attack_poc/run_attack_from_scratch.sh` for capture-enabled proof run |
+| `SINGLE_COMMAND_ATTACK_TUTORIAL.md` | Separate markdown tutorial for the existing one-command attack workflow (`./attack_poc/run_attack.sh`) |
+| `VDI_ATTACK_COMMANDS.md` | Minimal command-only VDI runbook for branch switch, attack run, capture run, and rollback |
 | `verify_attack.sh` | Captures N3 GTP-U traffic and analyzes TEID swap |
 | `rollback.sh` | Tears down attack and restores original deployment |
 
@@ -158,14 +162,14 @@ This will:
 ### 2. Stop Any Existing Deployment
 
 ```bash
-docker-compose down -v 2>/dev/null || true
+./script/normal-down.sh
 ```
 
 ### 3. Launch the Attack Topology
 
 ```bash
 # From the free5gc-compose directory. Use --project-directory so paths resolve correctly.
-docker compose -f attack_poc/docker-compose-attack.yaml --project-name attack_poc --project-directory . up -d
+./script/attack-up.sh
 ```
 
 ### 4. Provision Subscribers
@@ -290,8 +294,7 @@ You can return to the normal (non-attack) deployment at any time:
 
 ```bash
 # From free5gc-compose directory
-docker compose -f attack_poc/docker-compose-attack.yaml --project-name attack_poc --project-directory . down
-docker compose up -d
+./script/rollback-to-normal.sh
 ```
 
 This brings up the default compose with the **unmodified** SMF image (e.g. `free5gc/smf:v4.1.0`) and **one UPF**; no tunnel swap.
@@ -299,15 +302,15 @@ This brings up the default compose with the **unmodified** SMF image (e.g. `free
 **Option B — Use the rollback script:**
 
 ```bash
-./attack_poc/rollback.sh
+./script/rollback-to-normal.sh
 ```
 
 **Option C — Manual (same as Option A + optional image removal):**
 
 ```bash
-docker-compose -f attack_poc/docker-compose-attack.yaml down -v
+./script/attack-down.sh
 docker rmi free5gc/smf:compromised   # optional
-docker-compose up -d
+./script/normal-up.sh
 ```
 
 This restores the original single-UPF deployment using unmodified Docker Hub images.

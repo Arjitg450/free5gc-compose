@@ -1,4 +1,4 @@
-version: "3.8"
+name: free5gc-normal
 
 services:
   free5gc-upf:
@@ -322,6 +322,7 @@ services:
 
 networks:
   privnet:
+    name: free5gc-lab-net
     ipam:
       driver: default
       config:
@@ -331,3 +332,4 @@ networks:
 
 volumes:
   dbdata:
+    name: free5gc-compose_dbdata

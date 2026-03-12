@@ -4,6 +4,28 @@ DOCKER_IMAGE_TAG = 'latest'
 
 .PHONY: base
 all: base amf ausf nrf nssf pcf smf udm udr n3iwf upf chf tngf nef webconsole
+.PHONY: normal-up normal-down attack-up attack-down rollback-normal fix-enp0s3 fix-vdi-network
+
+normal-up:
+	./script/normal-up.sh
+
+normal-down:
+	./script/normal-down.sh
+
+attack-up:
+	./script/attack-up.sh
+
+attack-down:
+	./script/attack-down.sh
+
+rollback-normal:
+	./script/rollback-to-normal.sh
+
+fix-enp0s3:
+	./script/fix-enp0s3.sh
+
+fix-vdi-network:
+	./script/fix-vdi-network.sh
 
 base:
 	docker build -t ${DOCKER_IMAGE_OWNER}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ./base
