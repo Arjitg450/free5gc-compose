@@ -1,10 +1,8 @@
 # Student VDI Attack Tutorial
 
-This is the single tutorial to use on the VDI. Follow it in order.
+Run these commands in order on the VDI.
 
 ## 1. Fix the VDI network first
-
-Run these commands exactly on the VDI:
 
 ```bash
 sudo ip link set enp0s3 up
@@ -28,8 +26,6 @@ sudo chown -R ubuntu:ubuntu /opt/free5gc-compose
 
 ## 4. Update to the correct branch
 
-Run these commands exactly:
-
 ```bash
 git fetch origin
 git switch feat/ieee-10175424 || git switch -c feat/ieee-10175424 --track origin/feat/ieee-10175424
@@ -43,25 +39,17 @@ chmod +x script/*.sh attack_poc/*.sh
 ./attack_poc/run_attack.sh
 ```
 
-That command builds the compromised SMF if needed, switches the lab into attack mode, provisions the UEs, waits for registration, and runs the built-in verification.
+Wait for the script to finish. It now prints a terminal proof summary at the end.
 
-## 6. Verify that the attack ran
-
-Run these commands:
+## 6. Print the proof again if needed
 
 ```bash
-docker compose --project-name free5gc-attack --project-directory . -f attack_poc/docker-compose-attack.yaml ps
-docker logs smf --tail 50 | grep -i ATTACK
-docker logs ueransim-gnb --tail 20
-docker logs ueransim-ue1 --tail 20
-docker logs ueransim-ue2 --tail 20
+cat attack_poc/captures/latest_attack_proof_report.txt
 ```
 
-If the attack worked, you should see `ATTACK` lines in the SMF logs.
+This file is the easiest thing to trust on the VDI if `docker logs` does not show up cleanly in the terminal.
 
 ## 7. Optional: capture proof packets
-
-If you also want a pcap proof run, use:
 
 ```bash
 ./attack_poc/run_attack_with_pcap.sh
@@ -69,15 +57,11 @@ If you also want a pcap proof run, use:
 
 ## 8. Return to the normal stack
 
-When you are done, run:
-
 ```bash
 ./script/rollback-to-normal.sh
 ```
 
 ## 9. Copy-paste block
-
-If you want one block to paste line by line on an older VDI:
 
 ```bash
 sudo ip link set enp0s3 up
@@ -90,4 +74,5 @@ git switch feat/ieee-10175424 || git switch -c feat/ieee-10175424 --track origin
 git reset --hard origin/feat/ieee-10175424
 chmod +x script/*.sh attack_poc/*.sh
 ./attack_poc/run_attack.sh
+cat attack_poc/captures/latest_attack_proof_report.txt
 ```

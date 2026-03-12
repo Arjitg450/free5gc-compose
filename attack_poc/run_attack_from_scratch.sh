@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# run_attack_from_scratch.sh — Run Compromised SMF attack + generate pcap proof
+# run_attack_from_scratch.sh - Run Compromised SMF attack + generate pcap proof
 # ============================================================================
 # Usage (from free5gc-compose repo root):
 #   ./attack_poc/run_attack_from_scratch.sh
@@ -15,8 +15,12 @@ mkdir -p "${CAPTURE_DIR}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 PCAP_FILE="${CAPTURE_DIR}/attack_proof_${TIMESTAMP}.pcap"
 PROOF_REPORT="${CAPTURE_DIR}/attack_proof_report_${TIMESTAMP}.txt"
+LATEST_PCAP="${CAPTURE_DIR}/latest_attack_proof.pcap"
+LATEST_REPORT="${CAPTURE_DIR}/latest_attack_proof_report.txt"
 WEBUI_URL="http://localhost:5050"
 SMF_IMAGE="free5gc/smf:compromised"
+PCAP_CONTAINER="/ueransim/captures/attack_proof_${TIMESTAMP}.pcap"
+PCAP_READY=0
 
 compose_attack() {
   docker compose \
@@ -24,6 +28,23 @@ compose_attack() {
     --project-directory . \
     -f attack_poc/docker-compose-attack.yaml \
     "$@"
+}
+
+ensure_tcpdump_in_gnb() {
+  if docker exec ueransim-gnb sh -lc "command -v tcpdump" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "    tcpdump not present in gNB container; attempting install..."
+  if docker exec ueransim-gnb sh -lc "command -v apt-get" >/dev/null 2>&1; then
+    docker exec ueransim-gnb sh -lc "apt-get update -qq && apt-get install -y -qq tcpdump" >/dev/null 2>&1 && return 0
+  fi
+
+  if docker exec ueransim-gnb sh -lc "command -v apk" >/dev/null 2>&1; then
+    docker exec ueransim-gnb sh -lc "apk add --no-cache tcpdump" >/dev/null 2>&1 && return 0
+  fi
+
+  return 1
 }
 
 BASE_SERVICES=(
@@ -44,7 +65,7 @@ BASE_SERVICES=(
 )
 
 echo "=============================================="
-echo " Compromised SMF Attack — Full Run"
+echo " Compromised SMF Attack - Full Run"
 echo "=============================================="
 
 if ! docker image inspect "${SMF_IMAGE}" >/dev/null 2>&1; then
@@ -52,19 +73,19 @@ if ! docker image inspect "${SMF_IMAGE}" >/dev/null 2>&1; then
   ./attack_poc/build_compromised_smf.sh
 fi
 
-# ─── 1. Tear down + wipe DB volume ──────────────────────────────────────────
+# 1. Tear down + wipe DB volume
 echo "[1/8] Tearing down existing stack and wiping DB volume..."
 ./script/attack-down.sh
 compose_attack down --volumes --remove-orphans 2>/dev/null || true
 sleep 3
 
-# ─── 2. Bring up the full stack without UE containers ───────────────────────
+# 2. Bring up the full stack without UE containers
 echo "[2/8] Bringing up attack stack (core + gNB only)..."
 compose_attack up -d "${BASE_SERVICES[@]}"
 echo "    Waiting 20s for NFs to initialize..."
 sleep 20
 
-# ─── 3. Wait for WebUI to accept login ─────────────────────────────────────
+# 3. Wait for WebUI to accept login
 echo "[3/8] Waiting for WebUI login to become available..."
 for i in $(seq 1 20); do
   login_resp=$(curl -s -X POST "${WEBUI_URL}/api/login" \
@@ -82,13 +103,13 @@ for i in $(seq 1 20); do
   sleep 3
 done
 
-# ─── 4. Provision subscribers ───────────────────────────────────────────────
+# 4. Provision subscribers
 echo "[4/8] Provisioning UE1 and UE2..."
 export WEBUI_URL
 bash "${REPO_ROOT}/attack_poc/provision_subscribers.sh"
 sleep 3
 
-# ─── 5. Restart gNB + UEs sequentially (UE1 first, then UE2) ───────────────
+# 5. Restart gNB + UEs sequentially (UE1 first, then UE2)
 echo "[5/8] Restarting gNB + UEs (UE1 first, then UE2 for attack order)..."
 compose_attack restart ueransim-gnb
 sleep 5
@@ -102,7 +123,7 @@ if docker exec ueransim-ue1 ip addr show uesimtun0 >/dev/null 2>&1; then
   echo "    UE1 uesimtun0 is UP."
 else
   echo "    WARNING: UE1 uesimtun0 not found. Checking logs..."
-  docker logs ueransim-ue1 2>&1 | tail -10
+  docker logs ueransim-ue1 2>&1 | tail -10 || true
   echo "    Waiting 15s more..."
   sleep 15
 fi
@@ -116,60 +137,66 @@ if docker exec ueransim-ue2 ip addr show uesimtun0 >/dev/null 2>&1; then
   echo "    UE2 uesimtun0 is UP."
 else
   echo "    WARNING: UE2 uesimtun0 not found. Checking logs..."
-  docker logs ueransim-ue2 2>&1 | tail -20
+  docker logs ueransim-ue2 2>&1 | tail -20 || true
   echo "    Waiting 15s more..."
   sleep 15
 fi
 
-# ─── 6. Capture N3 GTP-U traffic via gNB container ─────────────────────────
+# 6. Capture N3 GTP-U traffic via gNB container
 echo "[6/8] Capturing N3 GTP-U traffic..."
-
-echo "    Installing tcpdump in gNB container..."
-docker exec ueransim-gnb apt-get update -qq 2>/dev/null
-docker exec ueransim-gnb apt-get install -y -qq tcpdump 2>/dev/null
-
-PCAP_CONTAINER="/ueransim/captures/attack_proof_${TIMESTAMP}.pcap"
-docker exec -d ueransim-gnb timeout 40 tcpdump -i any -w "${PCAP_CONTAINER}" 'udp port 2152'
-sleep 2
+if ensure_tcpdump_in_gnb; then
+  PCAP_READY=1
+  docker exec -d ueransim-gnb timeout 40 tcpdump -i any -w "${PCAP_CONTAINER}" 'udp port 2152' >/dev/null 2>&1 || PCAP_READY=0
+  sleep 2
+else
+  echo "    WARNING: Could not install tcpdump in gNB container; continuing without pcap capture."
+fi
 
 echo "    Generating uplink traffic from UE1..."
 docker exec ueransim-ue1 ping -I uesimtun0 -c 10 -W 2 8.8.8.8 2>/dev/null || true
 echo "    Generating uplink traffic from UE2..."
 docker exec ueransim-ue2 ping -I uesimtun0 -c 10 -W 2 8.8.8.8 2>/dev/null || true
-echo "    Waiting for pcap flush..."
-sleep 5
-docker exec ueransim-gnb killall tcpdump 2>/dev/null || true
-sleep 2
+if [ "${PCAP_READY}" -eq 1 ]; then
+  echo "    Waiting for pcap flush..."
+  sleep 5
+  docker exec ueransim-gnb killall tcpdump >/dev/null 2>&1 || true
+  sleep 2
+fi
 
-# ─── 7. Generate proof report ──────────────────────────────────────────────
+# 7. Generate proof report
 echo "[7/8] Gathering attack proof..."
 
 {
   echo "=============================================="
-  echo " ATTACK PROOF REPORT — ${TIMESTAMP}"
+  echo " ATTACK PROOF REPORT - ${TIMESTAMP}"
   echo "=============================================="
   echo ""
   echo "--- SMF [ATTACK] log lines ---"
   docker logs smf 2>&1 | grep -iE "ATTACK|SWAP|Session 1|Session 2" || echo "(no attack log lines)"
   echo ""
   echo "--- PFCP associations (SMF <-> UPFs) ---"
-  docker logs smf 2>&1 | grep -E "UPF\(10\.100\.200\.(101|102)\)|association" | tail -5
+  docker logs smf 2>&1 | grep -E "UPF\(10\.100\.200\.(101|102)\)|association" | tail -5 || true
   echo ""
   echo "--- Pcap: ${PCAP_FILE} ---"
-  if [ -s "${PCAP_FILE}" ]; then
+  if [ "${PCAP_READY}" -eq 1 ] && [ -s "${PCAP_FILE}" ]; then
     echo "Size: $(stat -c%s "${PCAP_FILE}") bytes"
     PKTS=$(docker exec ueransim-gnb tcpdump -r "${PCAP_CONTAINER}" -n 2>/dev/null | wc -l || echo 0)
     echo "GTP-U packets: ${PKTS}"
     echo ""
     echo "--- Sample GTP-U packets ---"
-    docker exec ueransim-gnb tcpdump -r "${PCAP_CONTAINER}" -n -v 2>/dev/null | head -40
+    docker exec ueransim-gnb tcpdump -r "${PCAP_CONTAINER}" -n -v 2>/dev/null | head -40 || true
   else
-    echo "Pcap is empty — PDU sessions may not have established."
+    echo "Pcap unavailable or empty - terminal proof below still shows whether the attack executed."
   fi
   echo ""
   echo "--- GTP-U traffic destination analysis ---"
-  TO_UPF1=$(docker exec ueransim-gnb tcpdump -r "${PCAP_CONTAINER}" -n 2>/dev/null | grep -c "10.100.200.101" || echo 0)
-  TO_UPF2=$(docker exec ueransim-gnb tcpdump -r "${PCAP_CONTAINER}" -n 2>/dev/null | grep -c "10.100.200.102" || echo 0)
+  if [ "${PCAP_READY}" -eq 1 ] && [ -s "${PCAP_FILE}" ]; then
+    TO_UPF1=$(docker exec ueransim-gnb tcpdump -r "${PCAP_CONTAINER}" -n 2>/dev/null | grep -c "10.100.200.101" || echo 0)
+    TO_UPF2=$(docker exec ueransim-gnb tcpdump -r "${PCAP_CONTAINER}" -n 2>/dev/null | grep -c "10.100.200.102" || echo 0)
+  else
+    TO_UPF1=0
+    TO_UPF2=0
+  fi
   echo "  Packets involving UPF1 (10.100.200.101): ${TO_UPF1}"
   echo "  Packets involving UPF2 (10.100.200.102): ${TO_UPF2}"
   if [ "${TO_UPF2}" = "0" ] && [ "${TO_UPF1}" -gt 0 ]; then
@@ -192,11 +219,20 @@ echo "[7/8] Gathering attack proof..."
   docker exec ueransim-ue2 ip addr show uesimtun0 2>/dev/null || echo "  (no uesimtun0)"
 } | tee "${PROOF_REPORT}"
 
+cp -f "${PROOF_REPORT}" "${LATEST_REPORT}"
+if [ -f "${PCAP_FILE}" ]; then
+  cp -f "${PCAP_FILE}" "${LATEST_PCAP}"
+fi
+
 echo ""
 echo "[8/8] Done."
 echo "=============================================="
 echo " Pcap:   ${PCAP_FILE}"
 echo " Report: ${PROOF_REPORT}"
-echo " Open pcap in Wireshark — filter: gtp"
+echo " Latest report: ${LATEST_REPORT}"
+echo " Open pcap in Wireshark - filter: gtp"
 echo " Check ip.dst and gtp.teid to verify swap."
 echo "=============================================="
+echo ""
+echo "Terminal proof summary:"
+grep -iE "ATTACK|SWAP EXECUTED|ATTACK CONFIRMED|UE1:|UE2:|uesimtun0|10\.60\.|10\.61\." "${LATEST_REPORT}" || true
