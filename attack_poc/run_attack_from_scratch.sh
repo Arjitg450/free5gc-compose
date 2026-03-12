@@ -15,23 +15,52 @@ mkdir -p "${CAPTURE_DIR}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 PCAP_FILE="${CAPTURE_DIR}/attack_proof_${TIMESTAMP}.pcap"
 PROOF_REPORT="${CAPTURE_DIR}/attack_proof_report_${TIMESTAMP}.txt"
-
-COMPOSE_CMD="docker compose -f attack_poc/docker-compose-attack.yaml --project-name free5gc-attack --project-directory ."
 WEBUI_URL="http://localhost:5050"
+SMF_IMAGE="free5gc/smf:compromised"
+
+compose_attack() {
+  docker compose \
+    --project-name free5gc-attack \
+    --project-directory . \
+    -f attack_poc/docker-compose-attack.yaml \
+    "$@"
+}
+
+BASE_SERVICES=(
+  free5gc-upf1
+  free5gc-upf2
+  db
+  free5gc-nrf
+  free5gc-amf
+  free5gc-ausf
+  free5gc-nssf
+  free5gc-pcf
+  free5gc-smf
+  free5gc-udm
+  free5gc-udr
+  free5gc-chf
+  free5gc-webui
+  ueransim-gnb
+)
 
 echo "=============================================="
 echo " Compromised SMF Attack — Full Run"
 echo "=============================================="
 
+if ! docker image inspect "${SMF_IMAGE}" >/dev/null 2>&1; then
+  echo "[preflight] Missing ${SMF_IMAGE}; building it first..."
+  ./attack_poc/build_compromised_smf.sh
+fi
+
 # ─── 1. Tear down + wipe DB volume ──────────────────────────────────────────
 echo "[1/8] Tearing down existing stack and wiping DB volume..."
 ./script/attack-down.sh
-${COMPOSE_CMD} down --volumes --remove-orphans 2>/dev/null || true
+compose_attack down --volumes --remove-orphans 2>/dev/null || true
 sleep 3
 
-# ─── 2. Bring up the full stack ─────────────────────────────────────────────
-echo "[2/8] Bringing up attack stack..."
-./script/attack-up.sh
+# ─── 2. Bring up the full stack without UE containers ───────────────────────
+echo "[2/8] Bringing up attack stack (core + gNB only)..."
+compose_attack up -d "${BASE_SERVICES[@]}"
 echo "    Waiting 20s for NFs to initialize..."
 sleep 20
 
@@ -47,7 +76,7 @@ for i in $(seq 1 20); do
   fi
   if [ "$i" -eq 20 ]; then
     echo "FATAL: WebUI not ready after 60s. Aborting."
-    ${COMPOSE_CMD} logs webui 2>&1 | tail -20
+    compose_attack logs webui 2>&1 | tail -20
     exit 1
   fi
   sleep 3
@@ -61,17 +90,15 @@ sleep 3
 
 # ─── 5. Restart gNB + UEs sequentially (UE1 first, then UE2) ───────────────
 echo "[5/8] Restarting gNB + UEs (UE1 first, then UE2 for attack order)..."
-${COMPOSE_CMD} stop ueransim-ue1 ueransim-ue2 2>/dev/null || true
-${COMPOSE_CMD} restart ueransim-gnb
+compose_attack restart ueransim-gnb
 sleep 5
 
 echo "    Starting UE1..."
-${COMPOSE_CMD} start ueransim-ue1
+compose_attack up -d --no-deps ueransim-ue1
 echo "    Waiting 20s for UE1 registration + PDU session..."
 sleep 20
 
-# Check UE1 got a tunnel
-if docker exec ueransim-ue1 ip addr show uesimtun0 &>/dev/null; then
+if docker exec ueransim-ue1 ip addr show uesimtun0 >/dev/null 2>&1; then
   echo "    UE1 uesimtun0 is UP."
 else
   echo "    WARNING: UE1 uesimtun0 not found. Checking logs..."
@@ -81,15 +108,15 @@ else
 fi
 
 echo "    Starting UE2..."
-${COMPOSE_CMD} start ueransim-ue2
+compose_attack up -d --no-deps ueransim-ue2
 echo "    Waiting 20s for UE2 registration + PDU session..."
 sleep 20
 
-if docker exec ueransim-ue2 ip addr show uesimtun0 &>/dev/null; then
+if docker exec ueransim-ue2 ip addr show uesimtun0 >/dev/null 2>&1; then
   echo "    UE2 uesimtun0 is UP."
 else
   echo "    WARNING: UE2 uesimtun0 not found. Checking logs..."
-  docker logs ueransim-ue2 2>&1 | tail -10
+  docker logs ueransim-ue2 2>&1 | tail -20
   echo "    Waiting 15s more..."
   sleep 15
 fi
