@@ -10,8 +10,8 @@ SECURE_PCAP="/tmp/day2_secure_n2.pcap"
 SECURE_LOG="/tmp/ue_secure.log"
 AMF_BAK="/tmp/amfcfg.day2.bak"
 UE_BAK="/tmp/uecfg.day2.bak"
-GNB_IP="10.100.200.12"
-AMF_IP="10.100.200.16"
+GNB_IP=""
+AMF_IP=""
 SUDO_CMD="sudo -n"
 
 need_cmd() {
@@ -37,6 +37,16 @@ if ! sudo -n true >/dev/null 2>&1; then
   sudo -v
 fi
 
+detect_ips() {
+  GNB_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ueransim 2>/dev/null || true)"
+  AMF_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' amf 2>/dev/null || true)"
+
+  if [ -z "$GNB_IP" ] || [ -z "$AMF_IP" ]; then
+    echo "Failed to detect live container IPs for ueransim/amf." >&2
+    exit 1
+  fi
+}
+
 restore_secure_config() {
   if [ -f "$AMF_BAK" ] && [ -f "$UE_BAK" ]; then
     cp "$AMF_BAK" config/amfcfg.yaml
@@ -47,6 +57,8 @@ restore_secure_config() {
 restart_stack_edge() {
   docker restart amf ueransim >/dev/null
   sleep 8
+  detect_ips
+  echo "[info] Capturing N2 between $GNB_IP and $AMF_IP"
 }
 
 start_n2_capture() {
